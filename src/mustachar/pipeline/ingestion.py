@@ -25,7 +25,7 @@ def parse_pdf(pdf_path: Path) -> str:
     try:
         from pypdf import PdfReader
     except ImportError:
-        from PyPDF2 import PdfReader  # type: ignore[no-redef]
+        from PyPDF2 import PdfReader  # type: ignore[import-not-found,no-redef]
 
     reader = PdfReader(str(pdf_path))
     pages_text: list[str] = []
