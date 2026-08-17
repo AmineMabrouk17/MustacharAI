@@ -1,10 +1,14 @@
 """Tests for the TTS pipeline stage."""
 
-from collections.abc import AsyncIterator
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 async def _fake_stream(items: list[dict[str, Any]]) -> AsyncIterator[dict[str, Any]]:
