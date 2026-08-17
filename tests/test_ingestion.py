@@ -48,7 +48,7 @@ def test_parse_pdf(tmp_path: Path) -> None:
     try:
         from pypdf import PdfWriter
     except ImportError:
-        from PyPDF2 import PdfWriter
+        from PyPDF2 import PdfWriter  # type: ignore[no-redef]
 
     pdf_path = tmp_path / "test.pdf"
     writer = PdfWriter()

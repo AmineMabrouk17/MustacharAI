@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -25,7 +25,7 @@ def parse_pdf(pdf_path: Path) -> str:
     try:
         from pypdf import PdfReader
     except ImportError:
-        from PyPDF2 import PdfReader
+        from PyPDF2 import PdfReader  # type: ignore[no-redef]
 
     reader = PdfReader(str(pdf_path))
     pages_text: list[str] = []
@@ -97,7 +97,7 @@ def ingest_pdfs(
         for i, c in enumerate(all_chunks)
     ]
     documents = [c["content"] for c in all_chunks]
-    metadatas = [
+    metadatas: list[dict[str, Any]] = [
         {
             "source": c.get("source", ""),
             "article": c.get("article", ""),
