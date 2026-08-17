@@ -1,43 +1,45 @@
-"""Tests for the FastAPI health endpoint."""
+"""Tests for the WebSocket streaming endpoint."""
 
-from unittest.mock import patch
+from starlette.testclient import TestClient
 
-import pytest
-from httpx import ASGITransport, AsyncClient
-
-from mustachar.api.app import app
+from mustachar.app import app
 
 
-@pytest.mark.asyncio
-async def test_health_returns_200() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://testserver",
-    ) as client:
-        resp = await client.get("/health")
-    assert resp.status_code == 200
+def test_ws_echo_binary_frame() -> None:
+    with TestClient(app).websocket_connect("/api/v1/stream") as ws:
+        payload = b"\x00\x01\x02\xff"
+        ws.send_bytes(payload)
+        status_msg = ws.receive_json()
+        assert status_msg["type"] == "status"
+        assert status_msg["stage"] == "listening"
+        assert status_msg["bytes_received"] == len(payload)
+        transcript_msg = ws.receive_json()
+        assert transcript_msg["type"] == "transcript"
+        assert "darja_text" in transcript_msg
+        assert "latency_ms" in transcript_msg
 
 
-@pytest.mark.asyncio
-async def test_health_returns_healthy_status() -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://testserver",
-    ) as client:
-        resp = await client.get("/health")
-    assert resp.json() == {"status": "healthy"}
+def test_ws_echo_multiple_frames() -> None:
+    with TestClient(app).websocket_connect("/api/v1/stream") as ws:
+        for i in range(5):
+            payload = bytes([i]) * 64
+            ws.send_bytes(payload)
+            status_msg = ws.receive_json()
+            assert status_msg["type"] == "status"
+            assert status_msg["bytes_received"] == len(payload)
+            transcript_msg = ws.receive_json()
+            assert transcript_msg["type"] == "transcript"
 
 
-@pytest.mark.asyncio
-@patch("mustachar.api.app.speech_to_text", return_value="مرحبا")
-async def test_ask_returns_transcript(mock_stt: object) -> None:
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://testserver",
-    ) as client:
-        resp = await client.post(
-            "/api/v1/ask",
-            files={"audio": ("clip.webm", b"fake-audio", "audio/webm")},
-        )
-    assert resp.status_code == 200
-    assert resp.json() == {"transcript": "مرحبا"}
+def test_ws_graceful_disconnect() -> None:
+    client = TestClient(app)
+    with client.websocket_connect("/api/v1/stream") as ws:
+        ws.send_bytes(b"ping")
+        ws.receive_json()
+        ws.receive_json()
+    with client.websocket_connect("/api/v1/stream") as ws:
+        ws.send_bytes(b"still alive")
+        status_msg = ws.receive_json()
+        assert status_msg["type"] == "status"
+        assert status_msg["bytes_received"] == len(b"still alive")
+        ws.receive_json()
