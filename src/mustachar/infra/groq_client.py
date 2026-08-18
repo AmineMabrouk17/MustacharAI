@@ -1,8 +1,8 @@
-"""Async wrapper around the Groq SDK for Whisper STT."""
+"""Async wrapper around the Groq SDK for Whisper STT and Llama chat."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import groq
 
@@ -36,3 +36,22 @@ async def transcribe(
         language=language,
     )
     return response.text
+
+
+async def chat(
+    messages: list[dict[str, str]],
+    *,
+    model: str = "llama-3.3-70b-versatile",
+    temperature: float = 0.3,
+    max_tokens: int = 1024,
+) -> str:
+    """Send a chat completion request to Groq Llama and return the response text."""
+    client = _get_client()
+    response = await client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore[arg-type]
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    content: Any = response.choices[0].message.content
+    return content if isinstance(content, str) else ""
