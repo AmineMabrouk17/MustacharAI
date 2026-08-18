@@ -37,3 +37,8 @@ Thumbs.db
 # Data (local only)
 data/chroma_db/
 data/raw_pdfs/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
