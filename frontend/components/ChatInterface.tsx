@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { ChatHistory, type ChatMessage } from "./ChatHistory";
 import { PipelineStatusIndicator } from "./PipelineStatus";
 import { WaveformVisualizer } from "./WaveformVisualizer";
@@ -14,7 +14,7 @@ import {
 
 const WS_URL =
   typeof window !== "undefined"
-    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/stream`
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:8000/api/v1/stream`
     : "ws://localhost:8000/api/v1/stream";
 
 let messageIdCounter = 0;
@@ -66,7 +66,7 @@ export function ChatInterface() {
     []
   );
 
-  const { isConnected, connect, disconnect, sendAudio } = useWebSocket({
+  const { isConnected, sendAudio } = useWebSocket({
     url: WS_URL,
     onAudioReceived: handleAudioReceived,
     onStatusChange: setStatus,
@@ -97,13 +97,6 @@ export function ChatInterface() {
     : playbackStatus === "speaking"
       ? "speaking"
       : status;
-
-  useEffect(() => {
-    connect();
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
 
   const handleRecordClick = useCallback(() => {
     if (isRecording) {

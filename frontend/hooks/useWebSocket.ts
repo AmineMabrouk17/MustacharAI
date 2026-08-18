@@ -52,29 +52,41 @@ export function useWebSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState<PipelineStatus>("idle");
 
-  const updateStatus = useCallback(
-    (newStatus: PipelineStatus) => {
-      setStatus(newStatus);
-      onStatusChange?.(newStatus);
-    },
-    [onStatusChange]
-  );
+  const onAudioReceivedRef = useRef(onAudioReceived);
+  const onStatusChangeRef = useRef(onStatusChange);
+  const onTranscriptRef = useRef(onTranscript);
+  const onAnswerRef = useRef(onAnswer);
+  const onErrorRef = useRef(onError);
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  onAudioReceivedRef.current = onAudioReceived;
+  onStatusChangeRef.current = onStatusChange;
+  onTranscriptRef.current = onTranscript;
+  onAnswerRef.current = onAnswer;
+  onErrorRef.current = onError;
+
+  const updateStatus = useCallback((newStatus: PipelineStatus) => {
+    setStatus(newStatus);
+    onStatusChangeRef.current?.(newStatus);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
 
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
+    wsRef.current = ws;
 
     ws.onopen = () => {
+      if (cancelled) { ws.close(); return; }
       setIsConnected(true);
       updateStatus("idle");
     };
 
     ws.onmessage = (event) => {
+      if (cancelled) return;
       if (event.data instanceof ArrayBuffer) {
         const blob = new Blob([event.data], { type: "audio/mpeg" });
-        onAudioReceived?.(blob);
+        onAudioReceivedRef.current?.(blob);
       } else {
         try {
           const message: WSMessage = JSON.parse(event.data);
@@ -83,10 +95,10 @@ export function useWebSocket({
               updateStatus(message.stage);
               break;
             case "transcript":
-              onTranscript?.(message.darja_text, message.latency_ms);
+              onTranscriptRef.current?.(message.darja_text, message.latency_ms);
               break;
             case "answer":
-              onAnswer?.(message.text, message.citations, message.fallback);
+              onAnswerRef.current?.(message.text, message.citations, message.fallback);
               break;
           }
         } catch {
@@ -96,7 +108,7 @@ export function useWebSocket({
     };
 
     ws.onerror = (error) => {
-      onError?.(error);
+      if (!cancelled) onErrorRef.current?.(error);
     };
 
     ws.onclose = () => {
@@ -105,15 +117,12 @@ export function useWebSocket({
       wsRef.current = null;
     };
 
-    wsRef.current = ws;
-  }, [url, onAudioReceived, updateStatus, onTranscript, onAnswer, onError]);
-
-  const disconnect = useCallback(() => {
-    if (wsRef.current) {
-      wsRef.current.close();
+    return () => {
+      cancelled = true;
+      ws.close();
       wsRef.current = null;
-    }
-  }, []);
+    };
+  }, [url, updateStatus]);
 
   const sendAudio = useCallback(
     (audioData: ArrayBuffer) => {
@@ -125,17 +134,9 @@ export function useWebSocket({
     [updateStatus]
   );
 
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, [disconnect]);
-
   return {
     isConnected,
     status,
-    connect,
-    disconnect,
     sendAudio,
   };
 }
