@@ -1,34 +1,77 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ChatHistory, type ChatMessage } from "./ChatHistory";
 import { PipelineStatusIndicator } from "./PipelineStatus";
 import { WaveformVisualizer } from "./WaveformVisualizer";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
-import { useWebSocket, type PipelineStatus } from "@/hooks/useWebSocket";
+import {
+  useWebSocket,
+  type PipelineStatus,
+  type Citation,
+} from "@/hooks/useWebSocket";
 
-const WS_URL = typeof window !== "undefined"
-  ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/stream`
-  : "ws://localhost:8000/api/v1/stream";
+const WS_URL =
+  typeof window !== "undefined"
+    ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/v1/stream`
+    : "ws://localhost:8000/api/v1/stream";
+
+let messageIdCounter = 0;
+function nextId(): string {
+  messageIdCounter += 1;
+  return `msg-${messageIdCounter}-${Date.now()}`;
+}
 
 export function ChatInterface() {
   const [status, setStatus] = useState<PipelineStatus>("idle");
-  const [queueLength, setQueueLength] = useState(0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  const { isPlaying, status: playbackStatus, enqueueAudio } = useAudioPlayback();
+  const { status: playbackStatus, enqueueAudio } = useAudioPlayback();
 
   const handleAudioReceived = useCallback(
     (audioData: Blob) => {
       enqueueAudio(audioData);
-      setQueueLength((prev) => prev + 1);
     },
     [enqueueAudio]
+  );
+
+  const handleTranscript = useCallback((text: string, _latencyMs: number) => {
+    if (!text) return;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: nextId(),
+        role: "user",
+        text,
+        timestamp: Date.now(),
+      },
+    ]);
+  }, []);
+
+  const handleAnswer = useCallback(
+    (text: string, citations: Citation[], fallback: boolean) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "assistant",
+          text,
+          citations: fallback ? [] : citations,
+          fallback,
+          timestamp: Date.now(),
+        },
+      ]);
+    },
+    []
   );
 
   const { isConnected, connect, disconnect, sendAudio } = useWebSocket({
     url: WS_URL,
     onAudioReceived: handleAudioReceived,
     onStatusChange: setStatus,
+    onTranscript: handleTranscript,
+    onAnswer: handleAnswer,
   });
 
   const handleDataAvailable = useCallback(
@@ -43,12 +86,17 @@ export function ChatInterface() {
     [sendAudio]
   );
 
-  const { isRecording, analyserNode, startRecording, stopRecording } = useAudioRecorder({
-    onDataAvailable: handleDataAvailable,
-    timeSlice: 300,
-  });
+  const { isRecording, analyserNode, startRecording, stopRecording } =
+    useAudioRecorder({
+      onDataAvailable: handleDataAvailable,
+      timeSlice: 300,
+    });
 
-  const displayStatus = isRecording ? "listening" : playbackStatus === "speaking" ? "speaking" : status;
+  const displayStatus = isRecording
+    ? "listening"
+    : playbackStatus === "speaking"
+      ? "speaking"
+      : status;
 
   useEffect(() => {
     connect();
@@ -68,14 +116,16 @@ export function ChatInterface() {
   }, [isRecording, startRecording, stopRecording]);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4" dir="rtl">
-      <div className="w-full max-w-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold text-zinc-100">مستشار تونس</h1>
-          <p className="text-zinc-400">مساعد ذكي للقانون التونسي</p>
+    <div className="flex flex-col h-screen p-4" dir="rtl">
+      <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto gap-4 overflow-hidden">
+        {/* Header */}
+        <div className="text-center space-y-1 pt-2 shrink-0">
+          <h1 className="text-2xl font-bold text-zinc-100">مستشار تونس</h1>
+          <p className="text-zinc-400 text-sm">مساعد ذكي للقانون التونسي</p>
         </div>
 
-        <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-3">
+        {/* Status bar */}
+        <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-3 shrink-0">
           <PipelineStatusIndicator status={displayStatus} />
           <div className="flex items-center gap-2">
             <span
@@ -89,36 +139,37 @@ export function ChatInterface() {
           </div>
         </div>
 
-        <div className="bg-zinc-900/50 rounded-lg p-4">
-          <WaveformVisualizer
-            analyserNode={analyserNode}
-            isActive={isRecording}
-          />
+        {/* Chat history */}
+        <div className="flex-1 overflow-hidden">
+          <ChatHistory messages={messages} />
         </div>
 
-        <div className="flex justify-center">
-          <button
-            onClick={handleRecordClick}
-            disabled={!isConnected}
-            className={`relative group flex items-center justify-center w-20 h-20 rounded-full transition-all duration-200 ${
-              isRecording
-                ? "bg-red-500 hover:bg-red-600 animate-pulse"
-                : "bg-emerald-600 hover:bg-emerald-700"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            <span className="text-3xl">{isRecording ? "⏹️" : "🎙️"}</span>
-            <span className="absolute -bottom-8 text-xs text-zinc-400 whitespace-nowrap">
-              {isRecording ? "إيقاف التسجيل" : "ابدأ التسجيل"}
-            </span>
-          </button>
-        </div>
-
-        {queueLength > 0 && (
-          <div className="text-center text-sm text-zinc-400">
-            <span className="animate-pulse">🔊</span>{" "}
-            {isPlaying ? "جاري التشغيل..." : `بانتظار التشغيل (${queueLength})`}
+        {/* Controls */}
+        <div className="space-y-4 shrink-0">
+          <div className="bg-zinc-900/50 rounded-lg p-3">
+            <WaveformVisualizer
+              analyserNode={analyserNode}
+              isActive={isRecording}
+            />
           </div>
-        )}
+
+          <div className="flex justify-center">
+            <button
+              onClick={handleRecordClick}
+              disabled={!isConnected}
+              className={`relative group flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200 ${
+                isRecording
+                  ? "bg-red-500 hover:bg-red-600 animate-pulse"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <span className="text-2xl">{isRecording ? "⏹️" : "🎙️"}</span>
+              <span className="absolute -bottom-7 text-xs text-zinc-400 whitespace-nowrap">
+                {isRecording ? "إيقاف التسجيل" : "ابدأ التسجيل"}
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

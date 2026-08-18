@@ -4,10 +4,39 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type PipelineStatus = "idle" | "listening" | "processing" | "speaking";
 
+export interface Citation {
+  source: string;
+  article: string;
+  content: string;
+}
+
+export interface TranscriptMessage {
+  type: "transcript";
+  darja_text: string;
+  latency_ms: number;
+}
+
+export interface AnswerMessage {
+  type: "answer";
+  text: string;
+  citations: Citation[];
+  fallback: boolean;
+  latency_ms: number;
+}
+
+export interface StatusMessage {
+  type: "status";
+  stage: PipelineStatus;
+}
+
+export type WSMessage = TranscriptMessage | AnswerMessage | StatusMessage;
+
 interface UseWebSocketOptions {
   url: string;
   onAudioReceived?: (audioData: Blob) => void;
   onStatusChange?: (status: PipelineStatus) => void;
+  onTranscript?: (text: string, latencyMs: number) => void;
+  onAnswer?: (text: string, citations: Citation[], fallback: boolean) => void;
   onError?: (error: Event) => void;
 }
 
@@ -15,6 +44,8 @@ export function useWebSocket({
   url,
   onAudioReceived,
   onStatusChange,
+  onTranscript,
+  onAnswer,
   onError,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -43,13 +74,20 @@ export function useWebSocket({
     ws.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
         const blob = new Blob([event.data], { type: "audio/mpeg" });
-        updateStatus("speaking");
         onAudioReceived?.(blob);
       } else {
         try {
-          const message = JSON.parse(event.data);
-          if (message.status) {
-            updateStatus(message.status);
+          const message: WSMessage = JSON.parse(event.data);
+          switch (message.type) {
+            case "status":
+              updateStatus(message.stage);
+              break;
+            case "transcript":
+              onTranscript?.(message.darja_text, message.latency_ms);
+              break;
+            case "answer":
+              onAnswer?.(message.text, message.citations, message.fallback);
+              break;
           }
         } catch {
           // Not JSON, ignore
@@ -68,7 +106,7 @@ export function useWebSocket({
     };
 
     wsRef.current = ws;
-  }, [url, onAudioReceived, updateStatus, onError]);
+  }, [url, onAudioReceived, updateStatus, onTranscript, onAnswer, onError]);
 
   const disconnect = useCallback(() => {
     if (wsRef.current) {
@@ -77,12 +115,15 @@ export function useWebSocket({
     }
   }, []);
 
-  const sendAudio = useCallback((audioData: ArrayBuffer) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(audioData);
-      updateStatus("processing");
-    }
-  }, [updateStatus]);
+  const sendAudio = useCallback(
+    (audioData: ArrayBuffer) => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(audioData);
+        updateStatus("processing");
+      }
+    },
+    [updateStatus]
+  );
 
   useEffect(() => {
     return () => {
