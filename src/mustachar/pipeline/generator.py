@@ -13,8 +13,7 @@ from mustachar.pipeline.retrieval import RETRIEVAL_THRESHOLD, retrieve
 logger = structlog.get_logger()
 
 FALLBACK_DARJA = (
-    "ما لقيتش معلومات كافية في القانون على هالسؤال. "
-    "حلّي تسأل محامي باش يعطيك إجابة أدق."
+    "ما لقيتش معلومات كافية في القانون على هالسؤال. حلّي تسأل محامي باش يعطيك إجابة أدق."
 )
 
 SYSTEM_PROMPT = """\
@@ -81,8 +80,7 @@ async def generate(
         {
             "role": "user",
             "content": (
-                f"السياق القانوني:\n\n{context_block}\n\n"
-                f"سؤال المستخدم:\n{query}"
+                f"السياق القانوني:\n\n{context_block}\n\nسؤال المستخدم:\n{query}"
             ),
         },
     ]

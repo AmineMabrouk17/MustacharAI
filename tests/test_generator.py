@@ -72,7 +72,9 @@ async def test_generate_returns_fallback_when_no_hits(
 
 
 @pytest.mark.asyncio
-@patch("mustachar.pipeline.generator.chat", return_value="القانون ينص على ذلك في المادة 1")
+@patch(
+    "mustachar.pipeline.generator.chat", return_value="القانون ينص على ذلك في المادة 1"
+)
 @patch(
     "mustachar.pipeline.generator.retrieve",
     return_value=[
