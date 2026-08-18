@@ -53,7 +53,6 @@ export function useAudioRecorder({
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
-          onDataAvailable?.(event.data);
         }
       };
 
@@ -85,8 +84,13 @@ export function useAudioRecorder({
 
     setAnalyserNode(null);
     setIsRecording(false);
+
+    if (chunksRef.current.length > 0) {
+      const fullBlob = new Blob(chunksRef.current, { type: chunksRef.current[0].type });
+      onDataAvailable?.(fullBlob);
+    }
     chunksRef.current = [];
-  }, []);
+  }, [onDataAvailable]);
 
   useEffect(() => {
     return () => {

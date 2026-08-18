@@ -40,7 +40,7 @@ async def stream(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_bytes()
-            logger.debug("ws.audio_received", bytes=len(data))
+            logger.info("ws.audio_received", host=host, port=port, bytes=len(data))
 
             # --- Pipeline stages: STT → Reformulate → Retrieve → Generate ---
             await _send_json(
