@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-import time
 
 import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from mustachar.pipeline.generator import generate
-from mustachar.pipeline.stt import speech_to_text
+from mustachar.pipeline.orchestrator import run_pipeline
 from mustachar.pipeline.tts import tts_stage
 
 router = APIRouter()
@@ -28,7 +26,7 @@ async def stream(websocket: WebSocket) -> None:
     Protocol:
       - Client sends binary audio frames (webm/opus).
       - Server responds with ``status`` messages at each pipeline stage.
-      - Server runs STT → RAG retrieval → generation → TTS and sends:
+      - Server runs STT → Reformulate → Retrieve → Generate → TTS and sends:
         * ``transcript`` — the recognised Darja text
         * ``answer`` — the generated legal answer with citations
         * Binary audio frames for the TTS output
@@ -44,7 +42,7 @@ async def stream(websocket: WebSocket) -> None:
             data = await websocket.receive_bytes()
             logger.debug("ws.audio_received", bytes=len(data))
 
-            # --- STT stage ---
+            # --- Pipeline stages: STT → Reformulate → Retrieve → Generate ---
             await _send_json(
                 websocket,
                 {
@@ -54,60 +52,64 @@ async def stream(websocket: WebSocket) -> None:
                 },
             )
 
-            stt_start = time.perf_counter()
             try:
-                transcript = await speech_to_text(data, "stream.webm")
+                result = await run_pipeline(data, "stream.webm")
             except Exception:
-                logger.exception("ws.stt_error", host=host, port=port)
-                transcript = ""
-            stt_ms = round((time.perf_counter() - stt_start) * 1000, 1)
+                logger.exception("ws.pipeline_error", host=host, port=port)
+                await _send_json(
+                    websocket,
+                    {
+                        "type": "transcript",
+                        "darja_text": "",
+                        "reformulated_query": "",
+                        "latency_ms": 0,
+                    },
+                )
+                await _send_json(
+                    websocket,
+                    {
+                        "type": "answer",
+                        "text": "صارت مشكلة في المعالجة. حاول مرة أخرى.",
+                        "citations": [],
+                        "fallback": True,
+                        "latency_ms": 0,
+                        "stage_latencies_ms": {},
+                    },
+                )
+                continue
 
             await _send_json(
                 websocket,
                 {
                     "type": "transcript",
-                    "darja_text": transcript,
-                    "latency_ms": stt_ms,
+                    "darja_text": result.transcript,
+                    "reformulated_query": result.reformulated_query,
+                    "latency_ms": result.stage_latencies_ms.get("stt", 0),
                 },
             )
 
-            if not transcript:
+            if not result.transcript:
                 continue
 
-            # --- RAG generation stage ---
             await _send_json(
                 websocket,
-                {"type": "status", "stage": "processing"},
-            )
-
-            try:
-                result = await generate(transcript)
-            except Exception:
-                logger.exception("ws.generation_error", host=host, port=port)
-                result = {
-                    "answer": "صارت مشكلة في المعالجة. حاول مرة أخرى.",
-                    "hits": [],
-                    "fallback": True,
-                    "latency_ms": 0,
-                }
-
-            citations = [
                 {
-                    "source": hit.get("source", ""),
-                    "article": hit.get("article", ""),
-                    "content": hit.get("content", "")[:200],
-                }
-                for hit in result.get("hits", [])
-            ]
+                    "type": "status",
+                    "stage": "processing",
+                },
+            )
 
             await _send_json(
                 websocket,
                 {
                     "type": "answer",
-                    "text": result["answer"],
-                    "citations": citations,
-                    "fallback": result.get("fallback", False),
-                    "latency_ms": result.get("latency_ms", 0),
+                    "text": result.answer,
+                    "citations": result.citations,
+                    "fallback": result.fallback,
+                    "latency_ms": result.stage_latencies_ms.get(
+                        "retrieve_generate", 0
+                    ),
+                    "stage_latencies_ms": result.stage_latencies_ms,
                 },
             )
 
@@ -118,7 +120,7 @@ async def stream(websocket: WebSocket) -> None:
             )
 
             try:
-                async for chunk in tts_stage(result["answer"]):
+                async for chunk in tts_stage(result.answer):
                     await websocket.send_bytes(chunk)
             except Exception:
                 logger.exception("ws.tts_error", host=host, port=port)

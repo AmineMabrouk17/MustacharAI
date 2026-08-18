@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from mustachar.api.websocket import router as ws_router
 from mustachar.core.settings import settings
-from mustachar.pipeline.stt import speech_to_text
+from mustachar.pipeline.orchestrator import run_pipeline
 from mustachar.pipeline.tts import tts_full
 
 
@@ -40,10 +40,18 @@ def create_app() -> FastAPI:
         return {"status": "healthy"}
 
     @app.post("/api/v1/ask")
-    async def ask(audio: UploadFile) -> dict[str, str]:
+    async def ask(audio: UploadFile) -> dict[str, object]:
         audio_bytes = await audio.read()
-        transcript = await speech_to_text(audio_bytes, audio.filename or "audio.webm")
-        return {"transcript": transcript}
+        result = await run_pipeline(audio_bytes, audio.filename or "audio.webm")
+        return {
+            "transcript": result.transcript,
+            "reformulated_query": result.reformulated_query,
+            "answer": result.answer,
+            "citations": result.citations,
+            "fallback": result.fallback,
+            "stage_latencies_ms": result.stage_latencies_ms,
+            "total_latency_ms": result.total_latency_ms,
+        }
 
     @app.post("/api/v1/speak")
     async def speak(body: SpeakRequest) -> Response:
