@@ -57,7 +57,8 @@ select = [
     "RUF",   # Ruff-specific rules
 ]
 ignore = [
-    "E501",  # line too long (formatter handles this)
+    "E501",   # line too long (formatter handles this)
+    "RUF001", # ambiguous Unicode — false positive on Arabic text (this is an Arabic project)
 ]
 
 [tool.ruff.lint.isort]
