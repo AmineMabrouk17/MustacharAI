@@ -60,7 +60,7 @@ async def reformulate(darja_query: str) -> dict[str, Any]:
     ]
 
     try:
-        raw = await chat_json(messages, max_tokens=35)
+        raw = await chat_json(messages, max_tokens=120)
         result: dict[str, Any] = json.loads(raw)
     except (json.JSONDecodeError, Exception):
         logger.exception("reformulator_parse_error", query=darja_query)
