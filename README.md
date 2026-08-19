@@ -8,6 +8,16 @@
 
 ---
 
+## 🚀 Live Deployment
+
+| Service | URL |
+|---------|-----|
+| **Frontend** | [mustacharai.vercel.app](https://frontend-pi-black-3vsfa1449q.vercel.app) |
+| **Backend API** | [mustacharai.onrender.com](https://mustacharai.onrender.com) |
+| **API Docs** | [Swagger UI](https://mustacharai.onrender.com/docs) |
+
+---
+
 ## 🎯 Executive Summary & Vision
 
 **MustacharAI** is an engineering blueprint for an open-source, voice-native AI engine designed to democratize access to the Tunisian legal framework. By synthesizing **dialectal Speech-to-Text (STT)**, **cross-lingual Retrieval-Augmented Generation (RAG)**, and **neural speech synthesis (TTS)**, MustacharAI enables real-time spoken interactions in **Tunisian Darja** backed by 100% deterministic legal grounding in official legal codes (*Majallat*, *Doustour*, and *JORT*).
