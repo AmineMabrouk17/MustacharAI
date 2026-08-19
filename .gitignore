@@ -34,6 +34,11 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Environment secrets
+.env
+.env.local
+.env.*.local
+
 # Data (local only)
 data/chroma_db/
 data/raw_pdfs/
