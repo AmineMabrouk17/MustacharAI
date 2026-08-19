@@ -1,7 +1,8 @@
-"""Async wrapper around the Groq SDK for Whisper STT and Llama chat."""
+"""Async wrapper around the Groq SDK for Whisper STT and LLM chat."""
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 import groq
@@ -41,11 +42,13 @@ async def transcribe(
 async def chat(
     messages: list[dict[str, str]],
     *,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "",
     temperature: float = 0.3,
     max_tokens: int = 1024,
 ) -> str:
-    """Send a chat completion request to Groq Llama and return the response text."""
+    """Send a chat completion request and return the response text."""
+    if not model:
+        model = settings.groq_chat_model
     client = _get_client()
     response = await client.chat.completions.create(
         model=model,
@@ -60,21 +63,31 @@ async def chat(
 async def chat_json(
     messages: list[dict[str, str]],
     *,
-    model: str = "llama-3.3-70b-versatile",
+    model: str = "",
     temperature: float = 0.3,
     max_tokens: int = 256,
 ) -> str:
-    """Send a chat completion request with JSON output format.
+    """Send a chat completion request and extract a JSON object from the response.
 
-    Returns the raw JSON string from the response.
+    Returns the raw JSON string.  The model is asked via prompt to return JSON;
+    ``response_format`` is not used because not all Groq models support it.
     """
+    if not model:
+        model = settings.groq_chat_model
     client = _get_client()
-    response = await client.chat.completions.create(  # type: ignore[call-overload]
+    response = await client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
-        response_format={"type": "json_object"},
     )
     content: Any = response.choices[0].message.content
-    return content if isinstance(content, str) else ""
+    text = content if isinstance(content, str) else ""
+
+    # Try to extract a JSON object from the response (handles markdown fences)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        return text[start : end + 1]
+
+    raise json.JSONDecodeError("No JSON object found in response", text, 0)
