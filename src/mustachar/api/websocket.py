@@ -120,8 +120,11 @@ async def stream(websocket: WebSocket) -> None:
             )
 
             try:
+                audio_parts: list[bytes] = []
                 async for chunk in tts_stage(result.answer):
-                    await websocket.send_bytes(chunk)
+                    audio_parts.append(chunk)
+                if audio_parts:
+                    await websocket.send_bytes(b"".join(audio_parts))
             except Exception:
                 logger.exception("ws.tts_error", host=host, port=port)
 
