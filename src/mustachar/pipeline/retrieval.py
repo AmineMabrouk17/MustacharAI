@@ -11,7 +11,7 @@ from mustachar.infra.chroma_client import get_chroma_client, get_or_create_colle
 
 logger = structlog.get_logger()
 
-RETRIEVAL_THRESHOLD = 0.65
+RETRIEVAL_THRESHOLD = 0.85
 
 
 def retrieve(
