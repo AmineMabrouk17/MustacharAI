@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     groq_api_key: str = ""
+    groq_chat_model: str = "allam-2-7b"
+    groq_stt_model: str = "whisper-large-v3"
     chroma_persist_dir: str = "data/chroma_db"
 
 
