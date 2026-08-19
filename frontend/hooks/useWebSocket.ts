@@ -49,6 +49,7 @@ export function useWebSocket({
   onError,
 }: UseWebSocketOptions) {
   const wsRef = useRef<WebSocket | null>(null);
+  const connectionIdRef = useRef(0);
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState<PipelineStatus>("idle");
 
@@ -70,20 +71,20 @@ export function useWebSocket({
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    const id = ++connectionIdRef.current;
 
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => {
-      if (cancelled) { ws.close(); return; }
+      if (connectionIdRef.current !== id) { ws.close(); return; }
       setIsConnected(true);
       updateStatus("idle");
     };
 
     ws.onmessage = (event) => {
-      if (cancelled) return;
+      if (connectionIdRef.current !== id) return;
       if (event.data instanceof ArrayBuffer) {
         const blob = new Blob([event.data], { type: "audio/mpeg" });
         onAudioReceivedRef.current?.(blob);
@@ -108,19 +109,20 @@ export function useWebSocket({
     };
 
     ws.onerror = (error) => {
-      if (!cancelled) onErrorRef.current?.(error);
+      if (connectionIdRef.current === id) onErrorRef.current?.(error);
     };
 
     ws.onclose = () => {
+      if (connectionIdRef.current !== id) return;
       setIsConnected(false);
       updateStatus("idle");
       wsRef.current = null;
     };
 
     return () => {
-      cancelled = true;
+      connectionIdRef.current++;
       ws.close();
-      wsRef.current = null;
+      if (wsRef.current === ws) wsRef.current = null;
     };
   }, [url, updateStatus]);
 
