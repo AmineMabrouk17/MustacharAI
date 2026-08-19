@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 ARTICLE_PATTERN = re.compile(
-    r"(?:المادة|مادة)\s+(\d+)",
-    re.UNICODE,
+    r"(?:المادة|مادة)\s+(\d+)"
+    r"|^Article\s+(?:Premier|premier|PREMIER|\d+)",
+    re.UNICODE | re.MULTILINE,
 )
 
 
@@ -36,8 +37,17 @@ def parse_pdf(pdf_path: Path) -> str:
     return "\n".join(pages_text)
 
 
+def _article_label(match: re.Match) -> str:
+    """Extract a human-readable article label from a regex match."""
+    if match.group(1):  # Arabic: المادة 123
+        return f"المادة {match.group(1)}"
+    # French: Article Premier / Article 23
+    raw = match.group(0).strip()
+    return raw
+
+
 def chunk_by_articles(text: str) -> list[dict[str, str]]:
-    """Split text into chunks by Arabic article markers."""
+    """Split text into chunks by article markers (Arabic or French)."""
     matches = list(ARTICLE_PATTERN.finditer(text))
     if not matches:
         return [{"article": "全文", "content": text.strip()}] if text.strip() else []
@@ -53,8 +63,7 @@ def chunk_by_articles(text: str) -> list[dict[str, str]]:
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         content = text[start:end].strip()
         if content:
-            article_num = match.group(1)
-            chunks.append({"article": f"المادة {article_num}", "content": content})
+            chunks.append({"article": _article_label(match), "content": content})
 
     return chunks
 
@@ -93,7 +102,7 @@ def ingest_pdfs(
         return []
 
     ids = [
-        f"{c.get('source', 'unknown')}_{c.get('article', str(i))}"
+        f"{c.get('source', 'unknown')}_{i}_{c.get('article', '')}"
         for i, c in enumerate(all_chunks)
     ]
     documents = [c["content"] for c in all_chunks]
