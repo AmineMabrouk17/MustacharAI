@@ -35,6 +35,7 @@ export function useAudioPlayback() {
 
         const source = audioContextRef.current.createBufferSource();
         source.buffer = audioBuffer;
+        source.connect(audioContextRef.current.destination);
 
         await new Promise<void>((resolve) => {
           source.onended = () => resolve();
