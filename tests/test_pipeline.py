@@ -89,7 +89,7 @@ def test_retrieve_filters_by_threshold(
 
 
 def test_default_threshold() -> None:
-    assert RETRIEVAL_THRESHOLD == 0.85
+    assert RETRIEVAL_THRESHOLD == 0.65
 
 
 # ── Generator ───────────────────────────────────────────────────
