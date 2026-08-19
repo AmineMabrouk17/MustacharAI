@@ -13,9 +13,10 @@ import {
 } from "@/hooks/useWebSocket";
 
 const WS_URL =
-  typeof window !== "undefined"
+  process.env.NEXT_PUBLIC_WS_URL ||
+  (typeof window !== "undefined"
     ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.hostname}:8000/api/v1/stream`
-    : "ws://localhost:8000/api/v1/stream";
+    : "ws://localhost:8000/api/v1/stream");
 
 let messageIdCounter = 0;
 function nextId(): string {
