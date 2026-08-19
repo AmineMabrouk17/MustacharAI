@@ -13,20 +13,21 @@ from mustachar.infra.groq_client import chat_json
 logger = structlog.get_logger()
 
 SYSTEM_PROMPT = """\
-أنت مترجم للغة العربية الفصحى. مهمتك إعادة صياغة سؤال بالدارجة التونسية \
-إلى استعلام بحث قانوني بالعربية الفصحى.
+You are a legal search query translator. Your task is to rewrite a question \
+in Tunisian Darja into a French legal search query (the Tunisian legal corpus \
+is indexed in French).
 
-أعد النتيجة بصيغة JSON فقط:
+Return ONLY a JSON object:
 {
-  "primary_query": "الاستعلام الرئيسي بالعربية الفصحى",
-  "keywords": ["كلمة1", "كلمة2", "كلمة3"]
+  "primary_query": "French legal search query",
+  "keywords": ["mot1", "mot2", "mot3"]
 }
 
-قواعد:
-1. primary_query: جملة واحدة واضحة ومختصرة بالعربية الفصحى ( Legal MSA).
-2. keywords: 2-5 كلمات مفتاحية قانونية بالعربية الفصحى.
-3. لا تستخدم الدارجة في الإخراج.
-4. لا تُضف شرحًا أو نصًا خارج JSON.
+Rules:
+1. primary_query: one concise sentence in French legal terminology.
+2. keywords: 2-5 French legal keywords.
+3. Do NOT use Darja or Arabic in the output.
+4. Do NOT add any text outside the JSON.
 """
 
 FALLBACK_RESULT: dict[str, Any] = {

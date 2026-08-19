@@ -89,7 +89,7 @@ def test_retrieve_filters_by_threshold(
 
 
 def test_default_threshold() -> None:
-    assert RETRIEVAL_THRESHOLD == 0.65
+    assert RETRIEVAL_THRESHOLD == 0.85
 
 
 # ── Generator ───────────────────────────────────────────────────
@@ -148,7 +148,7 @@ async def test_generate_returns_grounded_answer(
 @patch("mustachar.pipeline.reformulator.chat_json")
 async def test_reformulate_returns_structured_output(mock_chat: AsyncMock) -> None:
     mock_chat.return_value = json.dumps(
-        {"primary_query": "القانون في تونس", "keywords": ["قانون"]}
+        {"primary_query": "droit en Tunisie", "keywords": ["droit"]}
     )
     result = await reformulate("كيفاش القانون في تونس؟")
     assert result["primary_query"] != ""
