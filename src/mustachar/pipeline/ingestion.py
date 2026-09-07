@@ -37,7 +37,7 @@ def parse_pdf(pdf_path: Path) -> str:
     return "\n".join(pages_text)
 
 
-def _article_label(match: re.Match) -> str:
+def _article_label(match: re.Match[str]) -> str:
     """Extract a human-readable article label from a regex match."""
     if match.group(1):  # Arabic: المادة 123
         return f"المادة {match.group(1)}"

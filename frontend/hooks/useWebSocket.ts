@@ -12,6 +12,7 @@ export interface Citation {
 
 export interface TranscriptMessage {
   type: "transcript";
+  partial?: boolean;
   darja_text: string;
   latency_ms: number;
 }
@@ -35,7 +36,7 @@ interface UseWebSocketOptions {
   url: string;
   onAudioReceived?: (audioData: Blob) => void;
   onStatusChange?: (status: PipelineStatus) => void;
-  onTranscript?: (text: string, latencyMs: number) => void;
+  onTranscript?: (text: string, latencyMs: number, partial: boolean) => void;
   onAnswer?: (text: string, citations: Citation[], fallback: boolean) => void;
   onError?: (error: Event) => void;
 }
@@ -59,11 +60,13 @@ export function useWebSocket({
   const onAnswerRef = useRef(onAnswer);
   const onErrorRef = useRef(onError);
 
-  onAudioReceivedRef.current = onAudioReceived;
-  onStatusChangeRef.current = onStatusChange;
-  onTranscriptRef.current = onTranscript;
-  onAnswerRef.current = onAnswer;
-  onErrorRef.current = onError;
+  useEffect(() => {
+    onAudioReceivedRef.current = onAudioReceived;
+    onStatusChangeRef.current = onStatusChange;
+    onTranscriptRef.current = onTranscript;
+    onAnswerRef.current = onAnswer;
+    onErrorRef.current = onError;
+  }, [onAudioReceived, onStatusChange, onTranscript, onAnswer, onError]);
 
   const updateStatus = useCallback((newStatus: PipelineStatus) => {
     setStatus(newStatus);
@@ -96,7 +99,11 @@ export function useWebSocket({
               updateStatus(message.stage);
               break;
             case "transcript":
-              onTranscriptRef.current?.(message.darja_text, message.latency_ms);
+              onTranscriptRef.current?.(
+                message.darja_text,
+                message.latency_ms,
+                message.partial ?? false
+              );
               break;
             case "answer":
               onAnswerRef.current?.(message.text, message.citations, message.fallback);
@@ -126,19 +133,22 @@ export function useWebSocket({
     };
   }, [url, updateStatus]);
 
-  const sendAudio = useCallback(
-    (audioData: ArrayBuffer) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(audioData);
-        updateStatus("processing");
-      }
-    },
-    [updateStatus]
-  );
+  const sendAudio = useCallback((audioData: ArrayBuffer) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(audioData);
+    }
+  }, []);
+
+  const sendEnd = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "end" }));
+    }
+  }, []);
 
   return {
     isConnected,
     status,
     sendAudio,
+    sendEnd,
   };
 }

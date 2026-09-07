@@ -80,7 +80,25 @@ async def run_pipeline(
         )
         return result
 
-    # ── Stage 2: Reformulate ──────────────────────────────────────
+    await _run_post_stt(result, pipeline_start)
+    return result
+
+
+async def run_pipeline_from_transcript(transcript: str) -> PipelineResult:
+    """Run the post-STT stages from an already-recognised transcript.
+
+    Used by the streaming WebSocket path, where the VAD + Whisper stages run
+    as the user speaks; the transcript no longer needs re-transcribing.
+    """
+    pipeline_start = time.perf_counter()
+    result = PipelineResult()
+    result.transcript = transcript
+    await _run_post_stt(result, pipeline_start)
+    return result
+
+
+async def _run_post_stt(result: PipelineResult, pipeline_start: float) -> None:
+    """Execute Reformulate → Retrieve → Generate on an existing transcript."""
     stage_start = time.perf_counter()
     try:
         reformulated = await reformulate(result.transcript)
@@ -92,9 +110,7 @@ async def run_pipeline(
         )
     else:
         result.reformulated_query = reformulated.get("primary_query", "")
-        result.stage_latencies_ms["reformulate"] = reformulated.get(
-            "latency_ms", 0.0
-        )
+        result.stage_latencies_ms["reformulate"] = reformulated.get("latency_ms", 0.0)
 
     search_query = result.reformulated_query or result.transcript
 
@@ -122,9 +138,7 @@ async def run_pipeline(
         (time.perf_counter() - stage_start) * 1000, 1
     )
 
-    result.total_latency_ms = round(
-        (time.perf_counter() - pipeline_start) * 1000, 1
-    )
+    result.total_latency_ms = round((time.perf_counter() - pipeline_start) * 1000, 1)
 
     logger.info(
         "pipeline.completed",
@@ -133,5 +147,3 @@ async def run_pipeline(
         fallback=result.fallback,
         answer_length=len(result.answer),
     )
-
-    return result

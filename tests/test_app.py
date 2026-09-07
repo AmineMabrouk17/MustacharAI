@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import array
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,6 +15,11 @@ from mustachar.pipeline.orchestrator import PipelineResult
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+# Raw 16 kHz / 16-bit / mono PCM fixtures matching the streaming protocol. One
+# VAD frame is 30 ms = 480 samples = 960 bytes.
+_SPEECH_FRAME = array.array("h", [1500] * 480).tobytes()
+_SILENCE_FRAME = bytes(960)
 
 
 def _make_pipeline_result(
@@ -111,21 +117,35 @@ async def test_speak_rejects_empty_text() -> None:
 
 # ── WebSocket /api/v1/stream ────────────────────────────────────
 
+# A turn: 4 speech frames to open the utterance, then 16 silence frames
+# (500 ms) which makes the VAD emit the completed segment.
+_TURN_PCM = _SPEECH_FRAME * 4 + _SILENCE_FRAME * 16
+
 
 @patch("mustachar.api.websocket.tts_stage", new=_fake_tts)
-@patch("mustachar.api.websocket.run_pipeline", return_value=_make_pipeline_result())
-def test_ws_full_pipeline(mock_pipeline: AsyncMock) -> None:
+@patch(
+    "mustachar.api.websocket.run_pipeline_from_transcript",
+    return_value=_make_pipeline_result(),
+)
+@patch("mustachar.api.websocket.transcribe_pcm_segment", return_value="مرحبا")
+def test_ws_streams_partial_transcript_then_pipeline(
+    mock_transcribe: AsyncMock, mock_pipeline: AsyncMock
+) -> None:
     client = TestClient(app)
     with client.websocket_connect("/api/v1/stream") as ws:
-        ws.send_bytes(b"\x00\x01\x02\xff")
+        ws.send_bytes(_TURN_PCM)
 
-        status = ws.receive_json()
-        assert status["type"] == "status"
-        assert status["stage"] == "listening"
+        partial = ws.receive_json()
+        assert partial["type"] == "transcript"
+        assert partial["partial"] is True
+        assert partial["darja_text"] == "مرحبا"
 
-        transcript = ws.receive_json()
-        assert transcript["type"] == "transcript"
-        assert transcript["darja_text"] == "سؤال بالدارجة"
+        ws.send_json({"type": "end"})
+
+        final_transcript = ws.receive_json()
+        assert final_transcript["type"] == "transcript"
+        assert final_transcript["partial"] is False
+        assert final_transcript["darja_text"] == "مرحبا"
 
         processing = ws.receive_json()
         assert processing["stage"] == "processing"
@@ -137,36 +157,56 @@ def test_ws_full_pipeline(mock_pipeline: AsyncMock) -> None:
         speaking = ws.receive_json()
         assert speaking["stage"] == "speaking"
 
-        audio1 = ws.receive_bytes()
-        audio2 = ws.receive_bytes()
-        assert audio1 == b"\xff\xfb\x90\x00"
-        assert audio2 == b"\xff\xfb\x90\x01"
+        audio = ws.receive_bytes()
+        assert audio == b"\xff\xfb\x90\x00\xff\xfb\x90\x01"
 
         idle = ws.receive_json()
         assert idle["stage"] == "idle"
 
+    mock_transcribe.assert_awaited_once()
+    mock_pipeline.assert_awaited_once_with("مرحبا")
+
 
 @patch(
-    "mustachar.api.websocket.run_pipeline", side_effect=RuntimeError("pipeline error")
+    "mustachar.api.websocket.run_pipeline_from_transcript",
+    side_effect=RuntimeError("pipeline error"),
 )
-def test_ws_error_returns_fallback(mock_pipeline: AsyncMock) -> None:
+@patch("mustachar.api.websocket.transcribe_pcm_segment", return_value="مرحبا")
+def test_ws_pipeline_error_returns_fallback(
+    mock_transcribe: AsyncMock, mock_pipeline: AsyncMock
+) -> None:
     client = TestClient(app)
     with client.websocket_connect("/api/v1/stream") as ws:
-        ws.send_bytes(b"\x00\x01")
-        ws.receive_json()  # status: listening
-        transcript = ws.receive_json()
-        assert transcript["darja_text"] == ""
+        ws.send_bytes(_TURN_PCM)
+        ws.receive_json()  # partial transcript
+
+        ws.send_json({"type": "end"})
+
+        final_transcript = ws.receive_json()
+        assert final_transcript["type"] == "transcript"
+        assert final_transcript["partial"] is False
+
+        processing = ws.receive_json()
+        assert processing["stage"] == "processing"
+
         answer = ws.receive_json()
+        assert answer["type"] == "answer"
         assert answer["fallback"] is True
+
+
+def test_ws_empty_turn_returns_idle() -> None:
+    client = TestClient(app)
+    with client.websocket_connect("/api/v1/stream") as ws:
+        ws.send_json({"type": "end"})
+        status = ws.receive_json()
+        assert status["type"] == "status"
+        assert status["stage"] == "idle"
 
 
 def test_ws_graceful_disconnect() -> None:
     client = TestClient(app)
     with client.websocket_connect("/api/v1/stream") as ws:
-        ws.send_bytes(b"ping")
-        ws.receive_json()
-        ws.receive_json()
-    with client.websocket_connect("/api/v1/stream") as ws:
         ws.send_bytes(b"still alive")
+        ws.send_json({"type": "end"})
         status = ws.receive_json()
-        assert status["bytes_received"] == len(b"still alive")
+        assert status["type"] == "status"

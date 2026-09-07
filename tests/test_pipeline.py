@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import array
 import json
+import struct
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,10 +17,15 @@ from mustachar.pipeline.orchestrator import (
     FALLBACK_STT,
     PipelineResult,
     run_pipeline,
+    run_pipeline_from_transcript,
 )
 from mustachar.pipeline.reformulator import FALLBACK_RESULT, reformulate
 from mustachar.pipeline.retrieval import RETRIEVAL_THRESHOLD, retrieve
-from mustachar.pipeline.stt import speech_to_text
+from mustachar.pipeline.stt import pcm_to_wav, speech_to_text, transcribe_pcm_segment
+from mustachar.pipeline.vad import SpeechSegmenter
+
+_SPEECH_FRAME = array.array("h", [1500] * 480).tobytes()
+_SILENCE_FRAME = bytes(960)
 
 # ── Ingestion ───────────────────────────────────────────────────
 
@@ -205,6 +212,74 @@ async def test_speech_to_text(mock_transcribe: AsyncMock) -> None:
     assert result == "أهلا"
 
 
+def test_pcm_to_wav_header() -> None:
+    pcm = b"\x00\x01\x02\x03"
+    wav = pcm_to_wav(pcm)
+    assert wav[:4] == b"RIFF"
+    assert wav[8:12] == b"WAVE"
+    assert wav[12:16] == b"fmt "
+    assert wav[36:40] == b"data"
+    assert len(wav) == 44 + len(pcm)
+    assert struct.unpack("<I", wav[40:44])[0] == len(pcm)
+    assert struct.unpack("<HH", wav[20:24]) == (1, 1)  # PCM, mono
+    assert struct.unpack("<I", wav[24:28])[0] == 16000
+
+
+@pytest.mark.asyncio
+@patch("mustachar.pipeline.stt.transcribe", return_value="أهلا")
+async def test_transcribe_pcm_segment(mock_transcribe: AsyncMock) -> None:
+    pcm = _SPEECH_FRAME * 4
+    result = await transcribe_pcm_segment(pcm)
+    assert result == "أهلا"
+    mock_transcribe.assert_awaited_once()
+    call = mock_transcribe.await_args
+    assert call is not None
+    audio: Any = call.kwargs["audio"]
+    assert audio[0] == "segment-16000.wav"
+    assert audio[1][:4] == b"RIFF"
+    assert audio[1][44:] == pcm
+
+
+# ── VAD ─────────────────────────────────────────────────────────
+
+
+def test_vad_emits_segment_after_silence() -> None:
+    segmenter = SpeechSegmenter()
+    chunks = [_SPEECH_FRAME * 4 + _SILENCE_FRAME * 16]
+    segments: list[bytes] = []
+    for chunk in chunks:
+        segments.extend(segmenter.feed(chunk))
+    assert len(segments) == 1
+    assert len(segments[0]) == 960 * 20  # 4 speech + 16 silence frames
+
+
+def test_vad_ignores_pure_silence() -> None:
+    segmenter = SpeechSegmenter()
+    assert segmenter.feed(_SILENCE_FRAME * 20) == []
+    assert segmenter.finish() == []
+
+
+def test_vad_finish_flushes_short_utterance() -> None:
+    segmenter = SpeechSegmenter()
+    assert segmenter.feed(_SPEECH_FRAME * 4) == []
+    segments = segmenter.finish()
+    assert len(segments) == 1
+    assert len(segments[0]) == 960 * 4
+
+
+def test_vad_finish_drops_very_short_utterance() -> None:
+    segmenter = SpeechSegmenter()
+    assert segmenter.feed(_SPEECH_FRAME * 2) == []
+    assert segmenter.finish() == []
+
+
+def test_vad_emits_at_max_utterance() -> None:
+    segmenter = SpeechSegmenter()
+    segments = segmenter.feed(_SPEECH_FRAME * 266)
+    assert len(segments) == 1
+    assert segmenter.finish() == []
+
+
 # ── Orchestrator ────────────────────────────────────────────────
 
 
@@ -250,6 +325,35 @@ async def test_pipeline_stt_failure(
     assert result.answer == FALLBACK_STT
     assert result.fallback is True
     mock_reformulate.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("mustachar.pipeline.orchestrator.generate")
+@patch("mustachar.pipeline.orchestrator.reformulate")
+@patch("mustachar.pipeline.orchestrator.speech_to_text")
+async def test_run_pipeline_from_transcript_skips_stt(
+    mock_stt: AsyncMock,
+    mock_reformulate: AsyncMock,
+    mock_generate: AsyncMock,
+) -> None:
+    mock_reformulate.return_value = {
+        "primary_query": "القانون",
+        "keywords": [],
+        "latency_ms": 50.0,
+    }
+    mock_generate.return_value = {
+        "answer": "جواب",
+        "hits": [],
+        "fallback": False,
+        "latency_ms": 100.0,
+    }
+
+    result = await run_pipeline_from_transcript("كيفاش القانون؟")
+    assert result.transcript == "كيفاش القانون؟"
+    assert result.reformulated_query == "القانون"
+    assert result.answer == "جواب"
+    assert result.fallback is False
+    mock_stt.assert_not_awaited()
 
 
 def test_fallback_messages_are_arabic() -> None:
