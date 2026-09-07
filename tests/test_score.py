@@ -191,3 +191,43 @@ async def test_with_retry_raises_after_max_attempts() -> None:
     with pytest.raises(RuntimeError):
         await _with_retry(flaky, attempts=MAX_ATTEMPTS, delay_ms=1)
     assert flaky.calls == MAX_ATTEMPTS
+
+
+class _EmptyFirst:
+    """Async callable returning an unusable empty string on the first call."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def __call__(self) -> str:
+        self.calls += 1
+        return "" if self.calls == 1 else "usable"
+
+
+class _AlwaysEmpty:
+    """Async callable whose result is never usable."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def __call__(self) -> str:
+        self.calls += 1
+        return ""
+
+
+@pytest.mark.asyncio
+async def test_with_retry_retries_invalid_result() -> None:
+    empty_first = _EmptyFirst()
+    assert (
+        await _with_retry(empty_first, attempts=3, delay_ms=1, ok=bool) == "usable"
+    )
+    assert empty_first.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_with_retry_returns_last_result_when_all_invalid() -> None:
+    always_empty = _AlwaysEmpty()
+    assert (
+        await _with_retry(always_empty, attempts=3, delay_ms=1, ok=bool) == ""
+    )
+    assert always_empty.calls == 3

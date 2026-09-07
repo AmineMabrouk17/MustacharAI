@@ -21,13 +21,16 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from mustachar.core.logging import setup_logging
 from mustachar.pipeline.generator import generate
 from mustachar.pipeline.reformulator import reformulate
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = structlog.get_logger()
 
@@ -211,32 +214,52 @@ async def _with_retry(
     *args: Any,
     attempts: int = MAX_ATTEMPTS,
     delay_ms: int = RETRY_DELAY_MS,
+    ok: Callable[[Any], bool] | None = None,
 ) -> Any:
-    """Run an async pipeline call, retrying transient failures.
+    """Run an async pipeline call, retrying transient failures or invalid results.
 
-    A transient network error must not silently turn into a wrong score; a
-    couple of quick retries make the harness output stable and repeatable.
-    The final failure propagates so the caller can fail-closed.
+    ``ok`` decides whether a result counts as usable. Downstream stages cannot
+    always surface failures as exceptions (the reformulator swallows them and
+    returns an empty result), so empty/invalid results are retried too. The
+    last result (or error) propagates so the caller can fail closed, keeping
+    harness output stable under network flakiness.
     """
+    last_result: Any = None
+    last_error: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
-            return await operation(*args)
-        except Exception:
-            if attempt == attempts:
-                raise
+            last_result = await operation(*args)
+            if ok is None or ok(last_result):
+                return last_result
+        except Exception as exc:
+            last_error = exc
+        if attempt < attempts:
             await asyncio.sleep(delay_ms * attempt / 1000)
-    raise AssertionError("unreachable")  # pragma: no cover
+    if last_error is not None:
+        raise last_error
+    return last_result
+
+
+def _primary_query(ref: Any) -> str:
+    """Extract the search query from a reformulation result."""
+    if isinstance(ref, dict):
+        return str(ref.get("primary_query", "")).strip()
+    return ""
+
+
+def _has_primary_query(ref: Any) -> bool:
+    """True when a reformulation produced a usable search query."""
+    return bool(_primary_query(ref))
 
 
 async def _evaluate_pair(qa: QAPair) -> QAScore:
     """Run one query through the live pipeline and score it."""
     try:
-        ref = await _with_retry(reformulate, qa.query)
+        ref = await _with_retry(reformulate, qa.query, ok=_has_primary_query)
     except Exception:
         logger.warning("score.reformulate_error", qid=qa.qid)
         ref = {}
-    primary = ref.get("primary_query", "") if isinstance(ref, dict) else ""
-    search_query = str(primary).strip() or qa.query
+    search_query = _primary_query(ref) or qa.query
 
     try:
         gen = await _with_retry(generate, search_query)
