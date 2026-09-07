@@ -97,6 +97,19 @@ def test_collection_uses_cosine_space() -> None:
     assert kwargs["metadata"] == {"hnsw:space": "cosine"}
 
 
+def test_collection_uses_e5_small_embedding_function() -> None:
+    from mustachar.infra import chroma_client
+
+    with patch(
+        "mustachar.infra.chroma_client.SentenceTransformerEmbeddingFunction",
+        return_value=MagicMock(),
+    ) as mock_embed:
+        embedding_fn = chroma_client._get_embedding_function()
+
+    mock_embed.assert_called_once_with(model_name=chroma_client.EMBEDDING_MODEL)
+    assert embedding_fn is mock_embed.return_value
+
+
 # ── CLI index ───────────────────────────────────────────────────
 
 

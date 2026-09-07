@@ -102,6 +102,26 @@ def test_retrieve_default_top_k_is_three(
     assert kwargs["n_results"] == 3
 
 
+@patch("mustachar.pipeline.retrieval.get_or_create_collection")
+@patch("mustachar.pipeline.retrieval.get_chroma_client")
+def test_retrieve_cosine_threshold_boundary(
+    mock_client: MagicMock, mock_col: MagicMock
+) -> None:
+    collection = MagicMock()
+    collection.query.return_value = _mock_query_result(
+        documents=["keep-at-boundary", "drop"],
+        metadatas=[
+            {"source": "a.pdf", "article": "المادة 1", "category": ""},
+            {"source": "b.pdf", "article": "المادة 2", "category": ""},
+        ],
+        distances=[0.35, 0.36],
+    )
+    mock_col.return_value = collection
+
+    hits = retrieve("query")
+    assert [h["distance"] for h in hits] == [0.35]
+
+
 def test_default_threshold() -> None:
     assert RETRIEVAL_THRESHOLD == 0.65
 
