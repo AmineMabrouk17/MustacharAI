@@ -68,11 +68,12 @@ async def test_transcribe_returns_text(mock_get: AsyncMock) -> None:
 @pytest.mark.asyncio
 async def test_tts_stage_yields_chunks() -> None:
     async def _fake_stream() -> AsyncIterator[dict[str, Any]]:
-        for chunk in [
+        chunks: list[dict[str, Any]] = [
             {"type": "audio", "data": b"chunk1"},
             {"type": "WordBoundary", "data": {}},
             {"type": "audio", "data": b"chunk2"},
-        ]:
+        ]
+        for chunk in chunks:
             yield chunk
 
     mock_comm = MagicMock()

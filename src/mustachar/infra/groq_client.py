@@ -79,7 +79,7 @@ async def chat_json(
     client = _get_client()
     response = await client.chat.completions.create(
         model=model,
-        messages=messages,
+        messages=messages,  # type: ignore[arg-type]
         temperature=temperature,
         max_tokens=max_tokens,
     )

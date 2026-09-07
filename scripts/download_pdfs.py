@@ -6,7 +6,6 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from urllib.parse import unquote
 
 import httpx
 
@@ -82,20 +81,21 @@ def download_pdf(entry: dict[str, str], dest_dir: Path) -> Path | None:
 
     print(f"  [download] {entry['name']} ...")
     try:
-        with httpx.Client(
-            follow_redirects=True, timeout=60, headers=HEADERS
-        ) as client:
+        with httpx.Client(follow_redirects=True, timeout=60, headers=HEADERS) as client:
             resp = client.get(entry["url"])
             resp.raise_for_status()
 
             content_type = resp.headers.get("content-type", "")
-            if "pdf" not in content_type and "octet-stream" not in content_type:
+            if (
+                "pdf" not in content_type
+                and "octet-stream" not in content_type
+                and resp.content[:4] != b"%PDF"
+            ):
                 # Some servers don't set content-type properly; check magic bytes
-                if not resp.content[:4] == b"%PDF":
-                    print(
-                        f"  [warn] {entry['name']}: response is not PDF "
-                        f"(content-type: {content_type}), saving anyway"
-                    )
+                print(
+                    f"  [warn] {entry['name']}: response is not PDF "
+                    f"(content-type: {content_type}), saving anyway"
+                )
 
             dest.write_bytes(resp.content)
             print(f"  [ok] {entry['name']} ({len(resp.content)} bytes)")
@@ -105,7 +105,7 @@ def download_pdf(entry: dict[str, str], dest_dir: Path) -> Path | None:
         return None
 
 
-def main() -> None:
+def main() -> int:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading {len(PDF_SOURCES)} PDFs to {RAW_DIR}\n")
@@ -121,7 +121,7 @@ def main() -> None:
             failed.append(entry["name"])
         time.sleep(1)  # polite delay
 
-    print(f"\n--- Summary ---")
+    print("\n--- Summary ---")
     print(f"Downloaded: {len(succeeded)}")
     print(f"Failed:     {len(failed)}")
     if failed:
