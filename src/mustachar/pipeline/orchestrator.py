@@ -15,12 +15,9 @@ from mustachar.pipeline.stt import speech_to_text
 logger = structlog.get_logger()
 
 FALLBACK_STT = "ما فهمتش الصوت. حاول مرة أخرى أحسن."
-FALLBACK_REFORMULATE = "ما نجمتش نفهم السؤال. حاول أعادة صياغته."
-FALLBACK_RETRIEVE = "ما لقيتش معلومات في القانون على هالسؤال."
 FALLBACK_GENERATE = (
     "ما لقيتش معلومات كافية في القانون على هالسؤال. حلّي تسأل محامي باش يعطيك إجابة أدق."
 )
-FALLBACK_TTS = "صارت مشكلة في تحويل الجواب لصوت."
 
 
 @dataclass
