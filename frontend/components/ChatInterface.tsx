@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ChatHistory, type ChatMessage } from "./ChatHistory";
 import { PipelineStatusIndicator } from "./PipelineStatus";
 import { WaveformVisualizer } from "./WaveformVisualizer";
@@ -37,18 +37,49 @@ export function ChatInterface() {
     [enqueueAudio]
   );
 
-  const handleTranscript = useCallback((text: string, _latencyMs: number) => {
-    if (!text) return;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: nextId(),
-        role: "user",
-        text,
-        timestamp: Date.now(),
-      },
-    ]);
-  }, []);
+  const transcriptBubbleRef = useRef<string | null>(null);
+  const partialTextRef = useRef("");
+
+  const handleTranscript = useCallback(
+    (text: string, _latencyMs: number, partial: boolean) => {
+      if (!text) return;
+      const inProgressId = transcriptBubbleRef.current;
+
+      if (partial) {
+        partialTextRef.current = partialTextRef.current
+          ? `${partialTextRef.current} ${text}`
+          : text;
+        const accumulated = partialTextRef.current;
+        if (inProgressId) {
+          setMessages((prev) =>
+            prev.map((m) => (m.id === inProgressId ? { ...m, text: accumulated } : m))
+          );
+          return;
+        }
+        const id = nextId();
+        transcriptBubbleRef.current = id;
+        setMessages((prev) => [
+          ...prev,
+          { id, role: "user", text: accumulated, timestamp: Date.now() },
+        ]);
+        return;
+      }
+
+      partialTextRef.current = "";
+      if (inProgressId) {
+        transcriptBubbleRef.current = null;
+        setMessages((prev) =>
+          prev.map((m) => (m.id === inProgressId ? { ...m, text } : m))
+        );
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: "user", text, timestamp: Date.now() },
+      ]);
+    },
+    []
+  );
 
   const handleAnswer = useCallback(
     (text: string, citations: Citation[], fallback: boolean) => {
@@ -67,7 +98,7 @@ export function ChatInterface() {
     []
   );
 
-  const { isConnected, sendAudio } = useWebSocket({
+  const { isConnected, sendAudio, sendEnd } = useWebSocket({
     url: WS_URL,
     onAudioReceived: handleAudioReceived,
     onStatusChange: setStatus,
@@ -76,13 +107,8 @@ export function ChatInterface() {
   });
 
   const handleDataAvailable = useCallback(
-    (data: Blob) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const arrayBuffer = reader.result as ArrayBuffer;
-        sendAudio(arrayBuffer);
-      };
-      reader.readAsArrayBuffer(data);
+    (data: ArrayBuffer) => {
+      sendAudio(data);
     },
     [sendAudio]
   );
@@ -102,12 +128,13 @@ export function ChatInterface() {
   const handleRecordClick = useCallback(() => {
     if (isRecording) {
       stopRecording();
+      sendEnd();
       setStatus("processing");
     } else {
       startRecording();
       setStatus("listening");
     }
-  }, [isRecording, startRecording, stopRecording]);
+  }, [isRecording, sendEnd, startRecording, stopRecording]);
 
   return (
     <div className="flex flex-col h-screen p-4" dir="rtl">

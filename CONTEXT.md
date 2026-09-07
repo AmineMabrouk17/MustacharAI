@@ -41,7 +41,7 @@ Natural Tunisian speech pattern mixing Darja grammar with MSA/French legal termi
 _Avoid_: bilingual, mixed language
 
 **Zero-Transcoding**:
-Passing browser-recorded audio (webm/opus) directly to Groq Whisper without server-side format conversion.
+Streaming browser-captured audio to Groq Whisper without server-side re-encoding. The frontend sends raw 16 kHz / 16-bit / mono PCM chunks; the backend adds only a WAV container header, never re-encodes the audio.
 _Avoid_: pass-through, direct forwarding
 
 **Corpus**:
