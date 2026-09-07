@@ -79,13 +79,47 @@ def test_retrieve_filters_by_threshold(
             {"source": "a.pdf", "article": "المادة 1", "category": ""},
             {"source": "b.pdf", "article": "المادة 2", "category": ""},
         ],
-        distances=[0.5, 0.9],
+        distances=[0.2, 0.7],
     )
     mock_col.return_value = collection
 
     hits = retrieve("query")
     assert len(hits) == 1
-    assert hits[0]["distance"] == 0.5
+    assert hits[0]["distance"] == 0.2
+
+
+@patch("mustachar.pipeline.retrieval.get_or_create_collection")
+@patch("mustachar.pipeline.retrieval.get_chroma_client")
+def test_retrieve_default_top_k_is_three(
+    mock_client: MagicMock, mock_col: MagicMock
+) -> None:
+    collection = MagicMock()
+    collection.query.return_value = _mock_query_result()
+    mock_col.return_value = collection
+
+    retrieve("query")
+    _, kwargs = collection.query.call_args
+    assert kwargs["n_results"] == 3
+
+
+@patch("mustachar.pipeline.retrieval.get_or_create_collection")
+@patch("mustachar.pipeline.retrieval.get_chroma_client")
+def test_retrieve_cosine_threshold_boundary(
+    mock_client: MagicMock, mock_col: MagicMock
+) -> None:
+    collection = MagicMock()
+    collection.query.return_value = _mock_query_result(
+        documents=["keep-at-boundary", "drop"],
+        metadatas=[
+            {"source": "a.pdf", "article": "المادة 1", "category": ""},
+            {"source": "b.pdf", "article": "المادة 2", "category": ""},
+        ],
+        distances=[0.35, 0.36],
+    )
+    mock_col.return_value = collection
+
+    hits = retrieve("query")
+    assert [h["distance"] for h in hits] == [0.35]
 
 
 def test_default_threshold() -> None:

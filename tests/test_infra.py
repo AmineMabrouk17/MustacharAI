@@ -84,6 +84,32 @@ async def test_tts_stage_yields_chunks() -> None:
     assert result == [b"chunk1", b"chunk2"]
 
 
+# ── ChromaDB client ─────────────────────────────────────────────
+
+
+def test_collection_uses_cosine_space() -> None:
+    from mustachar.infra.chroma_client import get_or_create_collection
+
+    client = MagicMock()
+    get_or_create_collection(client)
+    client.get_or_create_collection.assert_called_once()
+    _, kwargs = client.get_or_create_collection.call_args
+    assert kwargs["metadata"] == {"hnsw:space": "cosine"}
+
+
+def test_collection_uses_e5_small_embedding_function() -> None:
+    from mustachar.infra import chroma_client
+
+    with patch(
+        "mustachar.infra.chroma_client.SentenceTransformerEmbeddingFunction",
+        return_value=MagicMock(),
+    ) as mock_embed:
+        embedding_fn = chroma_client._get_embedding_function()
+
+    mock_embed.assert_called_once_with(model_name=chroma_client.EMBEDDING_MODEL)
+    assert embedding_fn is mock_embed.return_value
+
+
 # ── CLI index ───────────────────────────────────────────────────
 
 
