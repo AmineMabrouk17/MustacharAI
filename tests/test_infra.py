@@ -54,6 +54,12 @@ async def test_transcribe_returns_text(mock_get: AsyncMock) -> None:
 
     result = await transcribe(audio=("test.webm", b"fake-audio"))
     assert result == "مرحبا"
+    settings = Settings()
+    mock_client.audio.transcriptions.create.assert_awaited_with(
+        model=settings.groq_stt_model,
+        file=("test.webm", b"fake-audio"),
+        language="ar",
+    )
 
 
 # ── Edge-TTS client ─────────────────────────────────────────────

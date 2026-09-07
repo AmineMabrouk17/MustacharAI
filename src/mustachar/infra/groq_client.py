@@ -26,10 +26,12 @@ def _get_client() -> groq.AsyncGroq:
 async def transcribe(
     audio: FileTypes,
     *,
-    model: str = "whisper-large-v3",
+    model: str = "",
     language: str = "ar",
 ) -> str:
     """Send raw audio bytes to Groq Whisper and return the transcript text."""
+    if not model:
+        model = settings.groq_stt_model
     client = _get_client()
     response = await client.audio.transcriptions.create(
         model=model,

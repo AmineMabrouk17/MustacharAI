@@ -68,17 +68,17 @@ MustacharAI utilizes a decoupled, asynchronous pipeline where heavy neural compu
                                        │ Darja Transcript (~150ms)
                                        ▼
                   ┌─────────────────────────────────────────┐
-                  │ 2. Semantic Query Reformulator (Llama)  │
+                  │ 2. Semantic Query Reformulator (allam)  │
                   └────────────────────┬────────────────────┘
                                        │ MSA Legal Terms (~50ms)
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │ 3. Dense Vector Retrieval (ChromaDB)    │
                   └────────────────────┬────────────────────┘
-                                       │ Exact Statutory Clauses (~50ms)
+                                       │ Exact Statutory Clauses (~30ms)
                                        ▼
                   ┌─────────────────────────────────────────┐
-                  │  4. Grounded Reasoning Engine (Llama)   │
+                  │  4. Grounded Reasoning Engine (allam)   │
                   └────────────────────┬────────────────────┘
                                        │ Darja Text in Arabic Script (~250ms)
                                        ▼
@@ -96,16 +96,16 @@ MustacharAI utilizes a decoupled, asynchronous pipeline where heavy neural compu
 
 ## ⏱️ System Performance Budget
 
-To maintain natural voice interaction, total processing time is capped at **700ms - 900ms**:
+To maintain natural voice interaction, total processing time is capped at **~680 ms**:
 
 | Pipeline Stage | Sub-System | Target Latency | Optimization Mechanism |
 | --- | --- | --- | --- |
 | **Stage 1: STT** | Groq `whisper-large-v3` | **~150 ms** | Cloud LPU acceleration with language prompt forcing |
-| **Stage 2: Reformulation** | Groq `llama-3.3-70b` | **~50 ms** | Low token generation ($<30$ tokens) for MSA keyword mapping |
-| **Stage 3: Vector Search** | Local ChromaDB / `bge-m3` | **~50 ms** | Pre-computed embeddings with HNSW indexing |
-| **Stage 4: LLM Generation** | Groq `llama-3.3-70b` | **~250 ms** | High token throughput ($>250$ t/s) with low temperature |
+| **Stage 2: Reformulation** | Groq `allam-2-7b` | **~50 ms** | Low token generation ($<30$ tokens) for MSA keyword mapping |
+| **Stage 3: Vector Search** | Local ChromaDB / `multilingual-e5-small` | **~30 ms** | Pre-computed embeddings with HNSW indexing |
+| **Stage 4: LLM Generation** | Groq `allam-2-7b` | **~250 ms** | High token throughput ($>250$ t/s) with low temperature |
 | **Stage 5: TTS Synthesis** | Microsoft Edge-TTS | **~200 ms** | Direct byte-stream audio output buffering |
-| **TOTAL TARGET** | **End-to-End Pipeline** | **~700 ms** | **Sub-second real-time voice response** |
+| **TOTAL TARGET** | **End-to-End Pipeline** | **~680 ms** | **Sub-second real-time voice response** |
 
 ---
 
@@ -139,7 +139,7 @@ By delegating neural inference (STT and LLM generation) to Groq's cloud-hosted L
                                      ▼
  ┌────────────────────────────────────────────────────────────────────────┐
  │  EXTERNAL CLOUD API SERVICES                                           │
- │  ├── Groq LPU Cluster: Whisper-v3 STT & Llama-3.3-70B LLM              │
+ │  ├── Groq LPU Cluster: Whisper-v3 STT & allam-2-7b LLM                 │
  │  └── Microsoft Neural Network: Edge-TTS Engine (`ar-TN-HediNeural`)    │
  └────────────────────────────────────────────────────────────────────────┘
 ```

@@ -15,12 +15,9 @@ from mustachar.pipeline.stt import speech_to_text
 logger = structlog.get_logger()
 
 FALLBACK_STT = "ما فهمتش الصوت. حاول مرة أخرى أحسن."
-FALLBACK_REFORMULATE = "ما نجمتش نفهم السؤال. حاول أعادة صياغته."
-FALLBACK_RETRIEVE = "ما لقيتش معلومات في القانون على هالسؤال."
 FALLBACK_GENERATE = (
     "ما لقيتش معلومات كافية في القانون على هالسؤال. حلّي تسأل محامي باش يعطيك إجابة أدق."
 )
-FALLBACK_TTS = "صارت مشكلة في تحويل الجواب لصوت."
 
 
 @dataclass
@@ -49,8 +46,9 @@ async def run_pipeline(
       4. Generate — grounded LLM answer
       5. TTS — text-to-speech (not collected here; streaming handled by caller)
 
-    Each stage has independent error handling with per-stage Darja fallback
-    messages and structured JSON latency logging.
+    STT and generation failures return a Darja fallback message; reformulation
+    errors degrade to the raw transcript. Per-stage latency is logged as
+    structured JSON.
     """
     pipeline_start = time.perf_counter()
     result = PipelineResult()
