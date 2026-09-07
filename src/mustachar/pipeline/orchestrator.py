@@ -46,8 +46,9 @@ async def run_pipeline(
       4. Generate — grounded LLM answer
       5. TTS — text-to-speech (not collected here; streaming handled by caller)
 
-    Each stage has independent error handling with per-stage Darja fallback
-    messages and structured JSON latency logging.
+    STT and generation failures return a Darja fallback message; reformulation
+    errors degrade to the raw transcript. Per-stage latency is logged as
+    structured JSON.
     """
     pipeline_start = time.perf_counter()
     result = PipelineResult()
