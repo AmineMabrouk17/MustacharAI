@@ -12,19 +12,20 @@ from mustachar.infra.chroma_client import get_chroma_client, get_or_create_colle
 logger = structlog.get_logger()
 
 RETRIEVAL_THRESHOLD = 0.65
+DEFAULT_N_RESULTS = 3
 
 
 def retrieve(
     query: str,
     *,
-    n_results: int = 5,
+    n_results: int = DEFAULT_N_RESULTS,
     threshold: float = RETRIEVAL_THRESHOLD,
 ) -> list[dict[str, Any]]:
     """Query ChromaDB for the most relevant legal articles.
 
     Returns a list of dicts with keys ``content``, ``source``,
-    ``article``, ``category``, and ``distance``.  Results below
-    *threshold* distance are discarded.
+    ``article``, ``category``, and ``distance``.  Results whose cosine
+    similarity is below *threshold* are discarded.
     """
     start = time.perf_counter()
 
@@ -42,8 +43,9 @@ def retrieve(
     metadatas: list[dict[str, Any]] = results.get("metadatas", [[]])[0]
     distances: list[float] = results.get("distances", [[]])[0]
 
+    max_distance = 1.0 - threshold
     for doc, meta, dist in zip(documents, metadatas, distances, strict=True):
-        if dist <= threshold:
+        if dist <= max_distance:
             hits.append(
                 {
                     "content": doc,

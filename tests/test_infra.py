@@ -84,6 +84,19 @@ async def test_tts_stage_yields_chunks() -> None:
     assert result == [b"chunk1", b"chunk2"]
 
 
+# ── ChromaDB client ─────────────────────────────────────────────
+
+
+def test_collection_uses_cosine_space() -> None:
+    from mustachar.infra.chroma_client import get_or_create_collection
+
+    client = MagicMock()
+    get_or_create_collection(client)
+    client.get_or_create_collection.assert_called_once()
+    _, kwargs = client.get_or_create_collection.call_args
+    assert kwargs["metadata"] == {"hnsw:space": "cosine"}
+
+
 # ── CLI index ───────────────────────────────────────────────────
 
 

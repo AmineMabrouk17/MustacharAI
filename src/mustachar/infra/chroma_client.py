@@ -33,4 +33,5 @@ def get_or_create_collection(
     return client.get_or_create_collection(
         name=name,
         embedding_function=_get_embedding_function(),
+        metadata={"hnsw:space": "cosine"},
     )
