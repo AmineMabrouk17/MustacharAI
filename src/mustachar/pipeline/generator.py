@@ -8,11 +8,7 @@ from typing import Any
 import structlog
 
 from mustachar.infra.groq_client import chat
-from mustachar.pipeline.retrieval import (
-    DEFAULT_N_RESULTS,
-    RETRIEVAL_THRESHOLD,
-    retrieve,
-)
+from mustachar.pipeline.retrieval import DEFAULT_N_RESULTS, retrieve
 
 logger = structlog.get_logger()
 
@@ -49,7 +45,7 @@ async def generate(
     query: str,
     *,
     n_results: int = DEFAULT_N_RESULTS,
-    threshold: float = RETRIEVAL_THRESHOLD,
+    threshold: float | None = None,
 ) -> dict[str, Any]:
     """Run retrieval then grounded generation.
 
