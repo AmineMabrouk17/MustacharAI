@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from mustachar.core.settings import Settings
+from mustachar.infra.edge_tts_client import synthesize
 from mustachar.infra.groq_client import chat, transcribe
 
 if TYPE_CHECKING:
@@ -20,6 +21,13 @@ def test_settings_defaults() -> None:
     s = Settings()
     assert s.app_name == "MustacharAI"
     assert s.debug is False
+
+
+def test_settings_tts_voice_default_is_french_neural_winner() -> None:
+    from mustachar.infra.edge_tts_client import DEFAULT_VOICE
+
+    assert Settings().tts_voice == "fr-FR-HenriNeural"
+    assert DEFAULT_VOICE == "fr-FR-HenriNeural"
 
 
 # ── Groq client ─────────────────────────────────────────────────
@@ -66,7 +74,12 @@ async def test_transcribe_returns_text(mock_get: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_tts_stage_yields_chunks() -> None:
+@patch(
+    "mustachar.infra.edge_tts_client._available_voice_names",
+    new_callable=AsyncMock,
+    return_value=frozenset({"fr-FR-HenriNeural"}),
+)
+async def test_tts_stage_yields_chunks(mock_avail: AsyncMock) -> None:
     async def _fake_stream() -> AsyncIterator[dict[str, Any]]:
         chunks: list[dict[str, Any]] = [
             {"type": "audio", "data": b"chunk1"},
@@ -89,6 +102,73 @@ async def test_tts_stage_yields_chunks() -> None:
             result.append(chunk)
 
     assert result == [b"chunk1", b"chunk2"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("available", "requested", "expected"),
+    [
+        (
+            {"fr-FR-DeniseNeural"},
+            "fr-FR-DeniseNeural",
+            "fr-FR-DeniseNeural",
+        ),
+        (
+            {"fr-FR-HenriNeural"},
+            "ar-TN-HediNeural",
+            "fr-FR-HenriNeural",
+        ),
+        (
+            {"fr-FR-DeniseNeural"},
+            "fr-FR-HenriNeural",
+            "fr-FR-DeniseNeural",
+        ),
+    ],
+)
+@patch("mustachar.infra.edge_tts_client._available_voice_names", new_callable=AsyncMock)
+@patch("mustachar.infra.edge_tts_client.edge_tts.Communicate")
+async def test_synthesize_resolves_to_served_voice(
+    mock_comm: MagicMock,
+    mock_avail: AsyncMock,
+    available: set[str],
+    requested: str,
+    expected: str,
+) -> None:
+    async def _fake_stream() -> AsyncIterator[dict[str, Any]]:
+        yield {"type": "audio", "data": b"x"}
+
+    mock_avail.return_value = frozenset(available)
+    mock_comm.return_value.stream = _fake_stream
+
+    parts: list[bytes] = []
+    async for chunk in synthesize("bonjour", voice=requested):
+        parts.append(chunk)
+
+    assert parts == [b"x"]
+    mock_comm.assert_called_once_with("bonjour", expected)
+
+
+@pytest.mark.asyncio
+@patch(
+    "mustachar.infra.edge_tts_client._available_voice_names",
+    new_callable=AsyncMock,
+    side_effect=RuntimeError("no network"),
+)
+@patch("mustachar.infra.edge_tts_client.edge_tts.Communicate")
+async def test_synthesize_uses_requested_voice_when_lookup_fails(
+    mock_comm: MagicMock, mock_avail: AsyncMock
+) -> None:
+    async def _fake_stream() -> AsyncIterator[dict[str, Any]]:
+        yield {"type": "audio", "data": b"x"}
+
+    mock_comm.return_value.stream = _fake_stream
+
+    parts: list[bytes] = []
+    async for chunk in synthesize("bonjour", voice="fr-FR-DeniseNeural"):
+        parts.append(chunk)
+
+    assert parts == [b"x"]
+    mock_comm.assert_called_once_with("bonjour", "fr-FR-DeniseNeural")
 
 
 # ── ChromaDB client ─────────────────────────────────────────────
@@ -180,9 +260,7 @@ def test_load_manifest(tmp_path: Any) -> None:
 
     manifest = tmp_path / "manifest.csv"
     manifest.write_text(
-        "filename,category\n"
-        "a.pdf,قانون التجارة\n"
-        "b.pdf,القانون الجنائي\n",
+        "filename,category\na.pdf,قانون التجارة\nb.pdf,القانون الجنائي\n",
         encoding="utf-8",
     )
     assert _load_manifest(str(manifest)) == {

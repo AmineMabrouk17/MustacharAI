@@ -97,8 +97,16 @@ async def test_speak_returns_audio() -> None:
     mock_comm = MagicMock()
     mock_comm.stream = _fake_stream
 
-    with patch(
-        "mustachar.infra.edge_tts_client.edge_tts.Communicate", return_value=mock_comm
+    with (
+        patch(
+            "mustachar.infra.edge_tts_client._available_voice_names",
+            new_callable=AsyncMock,
+            return_value=frozenset({"fr-FR-HenriNeural"}),
+        ),
+        patch(
+            "mustachar.infra.edge_tts_client.edge_tts.Communicate",
+            return_value=mock_comm,
+        ),
     ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://testserver"
@@ -182,7 +190,9 @@ def test_ws_streams_audio_part_before_synthesis_finishes() -> None:
     mock_pipeline = AsyncMock(return_value=_make_pipeline_result())
     with (
         patch("mustachar.api.websocket.tts_stage", new=_blocking_tts),
-        patch("mustachar.api.websocket.run_pipeline_from_transcript", new=mock_pipeline),
+        patch(
+            "mustachar.api.websocket.run_pipeline_from_transcript", new=mock_pipeline
+        ),
         patch("mustachar.api.websocket.transcribe_pcm_segment", return_value="مرحبا"),
     ):
         client = TestClient(app)
