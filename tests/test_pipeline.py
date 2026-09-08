@@ -20,7 +20,7 @@ from mustachar.pipeline.orchestrator import (
     run_pipeline_from_transcript,
 )
 from mustachar.pipeline.reformulator import FALLBACK_RESULT, reformulate
-from mustachar.pipeline.retrieval import RETRIEVAL_THRESHOLD, retrieve
+from mustachar.pipeline.retrieval import retrieve
 from mustachar.pipeline.stt import pcm_to_wav, speech_to_text, transcribe_pcm_segment
 from mustachar.pipeline.vad import SpeechSegmenter
 
@@ -86,13 +86,13 @@ def test_retrieve_filters_by_threshold(
             {"source": "a.pdf", "article": "المادة 1", "category": ""},
             {"source": "b.pdf", "article": "المادة 2", "category": ""},
         ],
-        distances=[0.2, 0.7],
+        distances=[0.1, 0.2],
     )
     mock_col.return_value = collection
 
     hits = retrieve("query")
     assert len(hits) == 1
-    assert hits[0]["distance"] == 0.2
+    assert hits[0]["distance"] == 0.1
 
 
 @patch("mustachar.pipeline.retrieval.get_or_create_collection")
@@ -121,16 +121,18 @@ def test_retrieve_cosine_threshold_boundary(
             {"source": "a.pdf", "article": "المادة 1", "category": ""},
             {"source": "b.pdf", "article": "المادة 2", "category": ""},
         ],
-        distances=[0.35, 0.36],
+        distances=[0.16, 0.17],
     )
     mock_col.return_value = collection
 
     hits = retrieve("query")
-    assert [h["distance"] for h in hits] == [0.35]
+    assert [h["distance"] for h in hits] == [0.16]
 
 
-def test_default_threshold() -> None:
-    assert RETRIEVAL_THRESHOLD == 0.65
+def test_threshold_defaults_from_settings() -> None:
+    from mustachar.core.settings import Settings
+
+    assert Settings().retrieval_threshold == 0.84
 
 
 # ── Generator ───────────────────────────────────────────────────

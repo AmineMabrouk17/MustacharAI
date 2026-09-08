@@ -33,7 +33,7 @@ Modern Standard Arabic (Fusha) used in written legal documents and published cod
 _Avoid_: Arabic, classical Arabic, Fus'ha
 
 **Threshold Short-Circuit**:
-Skipping LLM inference when vector search similarity < 0.65 to save latency and prevent hallucinations.
+Skipping LLM inference when vector search similarity < 0.84 to save latency and prevent hallucinations. Re-tuned from 0.65 on the eval set (issue #37), configured via `settings.retrieval_threshold`.
 _Avoid_: early exit, fallback skip
 
 **Code-Switching**:
