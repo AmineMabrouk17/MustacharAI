@@ -108,13 +108,44 @@ def test_collection_uses_e5_small_embedding_function() -> None:
     from mustachar.infra import chroma_client
 
     with patch(
-        "mustachar.infra.chroma_client.SentenceTransformerEmbeddingFunction",
+        "mustachar.infra.chroma_client.E5PrefixEmbeddingFunction",
         return_value=MagicMock(),
     ) as mock_embed:
         embedding_fn = chroma_client._get_embedding_function()
 
     mock_embed.assert_called_once_with(model_name=chroma_client.EMBEDDING_MODEL)
     assert embedding_fn is mock_embed.return_value
+
+
+def test_e5_prefixes_query_and_passage() -> None:
+    import numpy as np
+    from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+
+    from mustachar.infra import chroma_client
+
+    model = MagicMock()
+    model.encode.return_value = np.zeros((2, 8))
+
+    with patch.object(
+        SentenceTransformerEmbeddingFunction,
+        "models",
+        {chroma_client.EMBEDDING_MODEL: model},
+    ):
+        ef = chroma_client.E5PrefixEmbeddingFunction(
+            model_name=chroma_client.EMBEDDING_MODEL,
+        )
+
+    ef(["العقد اتفاق", "المحكمة"])
+    assert model.encode.call_count == 1
+    assert model.encode.call_args.args[0] == [
+        chroma_client.PASSAGE_PREFIX + "العقد اتفاق",
+        chroma_client.PASSAGE_PREFIX + "المحكمة",
+    ]
+
+    model.encode.return_value = np.zeros((1, 8))
+    ef.embed_query(["نص العقد"])
+    assert model.encode.call_count == 2
+    assert model.encode.call_args.args[0] == [chroma_client.QUERY_PREFIX + "نص العقد"]
 
 
 # ── CLI index ───────────────────────────────────────────────────
@@ -142,3 +173,19 @@ def test_build_parser() -> None:
     args = parser.parse_args(["--file", "test.pdf"])
     assert args.file == "test.pdf"
     assert args.dry_run is False
+
+
+def test_load_manifest(tmp_path: Any) -> None:
+    from mustachar.cli.index import _load_manifest
+
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text(
+        "filename,category\n"
+        "a.pdf,قانون التجارة\n"
+        "b.pdf,القانون الجنائي\n",
+        encoding="utf-8",
+    )
+    assert _load_manifest(str(manifest)) == {
+        "a.pdf": "قانون التجارة",
+        "b.pdf": "القانون الجنائي",
+    }
