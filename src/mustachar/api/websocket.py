@@ -80,7 +80,9 @@ async def stream(websocket: WebSocket) -> None:
         (Reformulate → Retrieve → Generate → TTS) and sends:
         * ``transcript`` — the full Darja turn text
         * ``answer`` — the generated legal answer with citations
-        * Binary audio frames for the TTS output
+        * Binary audio parts — each TTS chunk is streamed as its own frame
+          the moment it is synthesised, so audio starts before the whole
+          answer is ready
     """
     await websocket.accept()
     client = websocket.client
@@ -201,11 +203,17 @@ async def stream(websocket: WebSocket) -> None:
             )
 
             try:
-                audio_parts: list[bytes] = []
+                part_count = 0
                 async for chunk in tts_stage(result.answer):
-                    audio_parts.append(chunk)
-                if audio_parts:
-                    await websocket.send_bytes(b"".join(audio_parts))
+                    await websocket.send_bytes(chunk)
+                    part_count += 1
+                logger.info(
+                    "ws.tts_streamed",
+                    host=host,
+                    port=port,
+                    parts=part_count,
+                    answer_length=len(result.answer),
+                )
             except Exception:
                 logger.exception("ws.tts_error", host=host, port=port)
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import array
+import asyncio
+import threading
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -157,14 +159,53 @@ def test_ws_streams_partial_transcript_then_pipeline(
         speaking = ws.receive_json()
         assert speaking["stage"] == "speaking"
 
-        audio = ws.receive_bytes()
-        assert audio == b"\xff\xfb\x90\x00\xff\xfb\x90\x01"
+        first_part = ws.receive_bytes()
+        assert first_part == b"\xff\xfb\x90\x00"
+        second_part = ws.receive_bytes()
+        assert second_part == b"\xff\xfb\x90\x01"
 
         idle = ws.receive_json()
         assert idle["stage"] == "idle"
 
     mock_transcribe.assert_awaited_once()
     mock_pipeline.assert_awaited_once_with("مرحبا")
+
+
+def test_ws_streams_audio_part_before_synthesis_finishes() -> None:
+    gate = threading.Event()
+
+    async def _blocking_tts(text: str, voice: str = "ar") -> AsyncIterator[bytes]:
+        yield b"first-part"
+        await asyncio.to_thread(gate.wait)
+        yield b"second-part"
+
+    mock_pipeline = AsyncMock(return_value=_make_pipeline_result())
+    with (
+        patch("mustachar.api.websocket.tts_stage", new=_blocking_tts),
+        patch("mustachar.api.websocket.run_pipeline_from_transcript", new=mock_pipeline),
+        patch("mustachar.api.websocket.transcribe_pcm_segment", return_value="مرحبا"),
+    ):
+        client = TestClient(app)
+        with client.websocket_connect("/api/v1/stream") as ws:
+            ws.send_bytes(_TURN_PCM)
+            ws.receive_json()  # partial transcript
+
+            ws.send_json({"type": "end"})
+
+            ws.receive_json()  # final transcript
+            ws.receive_json()  # processing
+            ws.receive_json()  # answer
+            ws.receive_json()  # speaking
+
+            # The pipeline is still synthesising (the fake TTS is blocked on the
+            # gate and has not yielded its second part), so the first part can
+            # only have arrived because the backend streams chunks as produced.
+            assert ws.receive_bytes() == b"first-part"
+            gate.set()
+
+            assert ws.receive_bytes() == b"second-part"
+            idle = ws.receive_json()
+            assert idle["stage"] == "idle"
 
 
 @patch(
