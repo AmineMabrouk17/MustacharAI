@@ -10,7 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from mustachar.pipeline.generator import FALLBACK_DARJA, _build_context_block, generate
+from mustachar.pipeline.generator import (
+    FALLBACK_FRENCH,
+    SYSTEM_PROMPT,
+    _build_context_block,
+    generate,
+)
 from mustachar.pipeline.ingestion import chunk_by_articles, parse_pdf
 from mustachar.pipeline.orchestrator import (
     FALLBACK_GENERATE,
@@ -158,18 +163,33 @@ def test_build_context_block() -> None:
 async def test_generate_fallback_on_no_hits(mock_retrieve: AsyncMock) -> None:
     result = await generate("سؤال")
     assert result["fallback"] is True
-    assert result["answer"] == FALLBACK_DARJA
+    assert result["answer"] == FALLBACK_FRENCH
+
+
+def test_system_prompt_requires_french_output() -> None:
+    assert "Répondez en français" in SYSTEM_PROMPT
+    assert "concis" in SYSTEM_PROMPT
+
+
+def test_system_prompt_requires_citations_in_affirmative_answers() -> None:
+    assert "Fasl" in SYSTEM_PROMPT
+    assert "Majalla" in SYSTEM_PROMPT
+
+
+def test_system_prompt_forbids_inventing_information() -> None:
+    assert "contexte" in SYSTEM_PROMPT
+    assert "N'inventez jamais" in SYSTEM_PROMPT
 
 
 @pytest.mark.asyncio
-@patch("mustachar.pipeline.generator.chat", return_value="جواب من القانون")
+@patch("mustachar.pipeline.generator.chat", return_value="Réponse fondée sur le corpus")
 @patch(
     "mustachar.pipeline.generator.retrieve",
     return_value=[
         {
             "content": "نص",
             "source": "a.pdf",
-            "article": "المادة 1",
+            "article": "Article 1",
             "category": "",
             "distance": 0.3,
         }
@@ -180,7 +200,7 @@ async def test_generate_returns_grounded_answer(
 ) -> None:
     result = await generate("ما هو القانون؟")
     assert result["fallback"] is False
-    assert result["answer"] == "جواب من القانون"
+    assert result["answer"] == "Réponse fondée sur le corpus"
     mock_chat.assert_awaited_once()
 
 
@@ -358,9 +378,9 @@ async def test_run_pipeline_from_transcript_skips_stt(
     mock_stt.assert_not_awaited()
 
 
-def test_fallback_messages_are_arabic() -> None:
-    assert "ما فهمتش" in FALLBACK_STT
-    assert "ما لقيتش" in FALLBACK_GENERATE
+def test_fallback_messages_are_french() -> None:
+    assert "Je n'ai pas compris" in FALLBACK_STT
+    assert "dans le corpus juridique" in FALLBACK_GENERATE
 
 
 def test_pipeline_result_defaults() -> None:

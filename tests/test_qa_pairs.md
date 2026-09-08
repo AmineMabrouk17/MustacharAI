@@ -2,137 +2,137 @@
 
 Query-answer pairs for testing the RAG pipeline's legal knowledge accuracy.
 
-**How to use:** Send each query (in Tunisian Darja) to the system and compare the response against the expected content. The answer doesn't need to be word-for-word, but must contain the key legal principle or article reference shown.
+**How to use:** Send each query (in Tunisian Darja) to the system and compare the response against the expected content. The answer doesn't need to be word-for-word, but must contain the key legal principle or article reference shown, and must be written in French.
 
 ---
 
 ## 1. قانون الالتزامات والعقود (Obligations & Contracts)
 
 ### Q1 — ما هي العقدة وأركانها الأساسية؟
-**Expected:** العقد هو اتفاق طرفين على تأثير التزام. أركانه: التراضي، الأهلية، المحل المشروع، السبب المشروع.
-**Article ref:** المادة 1 edible من قانون الالتزامات والعقود.
+**Expected:** Le contrat est un accord entre deux parties destiné à créer des obligations. Ses éléments sont le consentement, la capacité, un objet licite et une cause licite.
+**Article ref:** Art. 1 du Code des Obligations et des Contrats.
 
 ### Q2 — كيفاش تعمل الإقالة في القانون التونسي؟
-**Expected:** الإقالة هي اتفاق على إلغاء العقد. شروطها: رضى الطرفين،obao_capacity، والمحل stesso must be existing.
-**Article ref:** فصل من قانون الالتزامات والعقود ينظم الإقالة.
+**Expected:** La résiliation conventionnelle est un accord visant à dissoudre le contrat. Ses conditions sont le consentement des deux parties.
+**Article ref:** Fasl du Code des Obligations et des Contrats régissant la résiliation.
 
 ### Q3 — وش تعمل كان فما تعاقد مع شخص ما عندوش أهلية؟
-**Expected:** العقد يكون باطل أو قابل للإبطال إذا كان أحد الطرفين لا يملك الأهلية القانونية.
-**Article ref:** أحكام الأهلية في قانون الالتزامات والعقود.
+**Expected:** Le contrat conclu avec une personne dépourvue de capacité juridique est nul ou annulable.
+**Article ref:** Dispositions sur la capacité dans le Code des Obligations et des Contrats.
 
 ---
 
 ## 2. القانون الجنائي (Penal Code)
 
 ### Q4 — وش هي جريمة القتل في القانون التونسي والعقوبة عليها؟
-**Expected:** القتل العمد يُعاقب عليه بالإعدام أو السجن المؤبد. القتل غير العمد يُعاقب عليه بالسجن.
-**Article ref:** نصوص القانون الجنائي التونسي الخاصة بالقتل.
+**Expected:** Le meurtre volontaire est puni de la peine capitale ou de la réclusion à perpétuité. Le meurtre involontaire est puni d'emprisonnement.
+**Article ref:** Dispositions du Code pénal tunisien relatives au meurtre.
 
 ### Q5 — كيفاش القانون يتعامل مع السرقة؟
-**Expected:** السرقة هي أخذ مال الغير نهباً. العقوبة تختلف حسب القيمة وطريقة التنفيذ.
-**Article ref:** نصوص السرقة في القانون الجنائي.
+**Expected:** Le vol est l'appropriation du bien d'autrui. La peine varie selon la valeur du bien et le mode d'exécution.
+**Article ref:** Dispositions relatives au vol dans le Code pénal.
 
 ### Q6 — وش العقوبة على التزوير في القانون التونسي؟
-**Expected:** التزوير جريمة يعاقب عليها بالسجن والغرامة حسب نوع التزوير (ware، مالي، إداري).
-**Article ref:** نصوص التزوير في القانون الجنائي.
+**Expected:** La falsification est une infraction punie d'emprisonnement et d'amende selon son type (faux, faux en écritures, faux administratif).
+**Article ref:** Dispositions relatives à la falsification dans le Code pénal.
 
 ---
 
 ## 3. قانون الحالة الشخصية (Personal Status Code)
 
 ### Q7 — كيفاش يصير الطلاق في تونس؟
-**Expected:** الطلاق في تونس يتم أمام المحكمة. لا يصح طلاق خارج المحكمة. يجب أن يكون لسبب مشروع.
-**Article ref:** أحكام الطلاق في قانون الحالة الشخصية.
+**Expected:** Le divorce en Tunisie se prononce devant le tribunal. Aucun divorce en dehors du tribunal n'est valable. Il doit reposer sur un motif légitime.
+**Article ref:** Dispositions relatives au divorce dans le Code du statut personnel.
 
 ### Q8 — وش هي حقوق الطفل بعد الطلاق؟
-**Expected:** حضانة الطفل م responsibilities للطفل، مع مراعاة مصلحة الطفل. حق الزيارة للأب.
-**Article ref:** نصوص الحضانة في قانون الحالة الشخصية.
+**Expected:** La garde de l'enfant est confiée en tenant compte de l'intérêt de l'enfant. Le droit de visite appartient au père.
+**Article ref:** Dispositions relatives à la garde dans le Code du statut personnel.
 
 ### Q9 — كيفاش يتعمل عقد الزواج في تونس؟
-**Expected:** عقد الزواج يتم أمام 공证ي (الموثق) أو أمام القاضي. يجب تسجيله رسمياً.
-**Article ref:** أحكام الزواج في قانون الحالة الشخصية.
+**Expected:** Le mariage est conclu devant l'officier d'état civil (notaire) ou devant le juge. Il doit être enregistré officiellement.
+**Article ref:** Dispositions relatives au mariage dans le Code du statut personnel.
 
 ### Q10 — وش هي حقوق المرأة في الإرث في القانون التونسي؟
-**Expected:** المرأة المطلقة بكامل حقوقها في الإرث كالأخر. نسبتها في الإرث قد تختلف حسب قرابة المتوفى.
-**Article ref:** نصوص الإرث في قانون الحالة الشخصية.
+**Expected:** La femme jouit de droits patrimoniaux en matière d'héritage comme les autres héritiers. Sa part peut varier selon le degré de parenté avec le défunt.
+**Article ref:** Dispositions relatives à l'héritage dans le Code du statut personnel.
 
 ---
 
 ## 4. قانون الشغل (Labor Code)
 
 ### Q11 — وش هي حقوق العامل في القانون التونسي؟
-**Expected:** حق الأجر العادل، الإجازة السنوية، التأمين الصحي، حماية من الفصل التعسفي.
-**Article ref:** نصوص القانون Tunisian du travail.
+**Expected:** Le droit au salaire équitable, au congé annuel, à l'assurance maladie et à la protection contre le licenciement abusif.
+**Article ref:** Dispositions du Code du travail.
 
 ### Q12 — كيفاش يصير فصل العامل من الخدمة؟
-**Expected:** لا يمكن فصل العامل إلا لسبب مشروع ( Decompiled نقص، مخالفة). يجب إخطار العامل مسبقاً أو دفع تعويض.
-**Article ref:** أحكام الفصل في قانون الشغل.
+**Expected:** Le salarié ne peut être licencié que pour un motif légitime (insuffisance professionnelle, faute). Il doit être notifié au préalable ou recevoir une indemnité.
+**Article ref:** Dispositions relatives au licenciement dans le Code du travail.
 
 ### Q13 — وش المدة القانونية للعمل في تونس؟
-**Expected:** المدة العادية للعمل 48 ساعة أسبوعياً.eworks_hours يمكن أن تتغير حسب القطاع.
-**Article ref:** نصوص تنظيم الوقت في قانون الشغل.
+**Expected:** La durée normale du travail est de 48 heures par semaine. Elle peut varier selon le secteur d'activité.
+**Article ref:** Dispositions relatives à l'organisation du temps de travail dans le Code du travail.
 
 ---
 
 ## 5. قانون التجارة (Commerce Code)
 
-### Q14 — كيفاش يُسجّل شخص فnis في تونس؟
-**Expected:** تسجيل التجارة يتم لدى مسجل التجارة. يجب تقديم طلب ومستندات محددة.
-**Article ref:** أحكام التسجيل في قانون التجارة.
+### Q14 — كيفاش يُسجّل شخص طبيعي في تونس؟
+**Expected:** L'immatriculation au registre du commerce s'effectue auprès du conservateur du registre du commerce. Une demande et des documents spécifiques sont requis.
+**Article ref:** Dispositions relatives à l'immatriculation dans le Code de commerce.
 
-### Q15 — وش هي التزامات التاجر في القانون التونسي؟
-**Expected:** التاجر ملتزم بوضع دفاتر تجارية، تسجيل الحسابات، وال declaring الإفلاس عند التعثر.
-**Article ref:** نصوص الالتزامات التجارية في قانون التجارة.
+### Q15 — وش هي التزامات التاجر في القانون التونسي？
+**Expected:** Le commerçant doit tenir des livres de commerce, enregistrer ses comptes et déclarer la faillite en cas de cessation de paiements.
+**Article ref:** Dispositions sur les obligations commerciales dans le Code de commerce.
 
 ---
 
 ## 6. قانون الحقوق العينية (Property Rights)
 
 ### Q16 — كيفاش يُسجّل العقار في تونس؟
-**Expected:** تسجيل العقار يتم لدى محفظة العقارات. يجب إثبات الملكية بالعنوان Warfare.
-**Article ref:** أحكام التسجيل العقاري في قانون الحقوق العينية.
+**Expected:** L'immatriculation immobilière s'effectue auprès de la conservation de la propriété foncière. La propriété se prouve par le titre foncier.
+**Article ref:** Dispositions relatives à l'immatriculation foncière.
 
 ### Q17 — وش هي حقوق الانتفاع في القانون التونسي؟
-**Expected:** حق الانتفاع هو حق الاستعمال والاستثمار لعقار مملوك لغيره. ينتهي بوفاة المنتفع أو مرور مدة.
-**Article ref:** نصوص الحقوق العينية في قانون الحقوق العينية.
+**Expected:** L'usufruit est le droit d'user et de jouir d'un bien appartenant à autrui. Il prend fin au décès de l'usufruitier ou à l'expiration du délai.
+**Article ref:** Dispositions relatives aux droits réels.
 
 ---
 
 ## 7. قانون الإجراءات الجرمية (Criminal Procedure)
 
 ### Q18 — كيفاش تتم متابعة شخص جرمي في تونس؟
-**Expected:** تتم المتابعة بإيداع الشكوى لدى الضبطية القضائية أو النيابة العامة.
-**Article ref:** أحكام المتابعة في قانون الإجراءات الجرمية.
+**Expected:** La poursuite pénale s'engage par le dépôt d'une plainte auprès de la police judiciaire ou du ministère public.
+**Article ref:** Dispositions relatives à la poursuite dans le Code de procédure pénale.
 
 ### Q19 — وش هي حقوق الموقوف في القانون التونسي؟
-**Expected:** حق المحاماة، حق الصمت، إخطار العائلة، ظروف الاعتقال الكريمة.
-**Article ref:** نصوص حقوق الموقوف في قانون الإجراءات الجرمية.
+**Expected:** Le droit à l'assistance d'un avocat, le droit de garder le silence, l'information de la famille et des conditions de détention dignes.
+**Article ref:** Dispositions relatives aux droits de la personne arrêtée dans le Code de procédure pénale.
 
 ### Q20 — كيفاش يصير الاستناد في القانون التونسي؟
-**Expected:** الاستناد هو إجراء يتخذه قاضي التحقيق للبحث عن الأدلة. يجب أن يكون لأسباب مشروعة.
-**Article ref:** أحكام الاستناد في قانون الإجراءات الجرمية.
+**Expected:** L'enquête préliminaire est une procédure menée par le juge d'instruction pour recueillir des preuves. Elle doit être fondée sur des motifs légitimes.
+**Article ref:** Dispositions relatives à l'enquête dans le Code de procédure pénale.
 
 ---
 
 ## 8. أسئلة متنوعة (Cross-cutting / Edge Cases)
 
 ### Q21 — وش الفرق بين الجريمة والمخالفة في القانون التونسي؟
-**Expected:** الجريمة أخطر ويعاقب عليها بالسجن أو الإعدام. المخالفة أخف ويعاقب عليها بالغرامة.
-**Article ref:** التمييز بين الجرائم والمخالفات في القانون الجنائي.
+**Expected:** Le crime est plus grave et puni d'emprisonnement ou de la peine capitale. La contravention est moins grave et punie d'une amende.
+**Article ref:** Distinction entre crimes et contraventions dans le Code pénal.
 
-### Q22 — كيفاش החוק يحمي المستهلك في تونس؟
-**Expected:** حماية المستهلك تشمل الحق في المعلومات، استبدال المنتجات المعيبة، والمطالبة بالتعويض.
-**Article ref:** نصوص حماية المستهلك في القانون التونسي.
+### Q22 — كيفاش يحمي القانون المستهلك في تونس؟
+**Expected:** La protection du consommateur inclut le droit à l'information, le remplacement des produits défectueux et le droit à une indemnisation.
+**Article ref:** Dispositions relatives à la protection du consommateur.
 
-### Q23 — وش هي الضمانات القانونية لل ciudadano في تونس؟
-**Expected:** الحق في المحاكمة العادلة، حرية التعبير، حق الدفاع.
-**Article ref:** الدستور والقانون التونسي.
+### Q23 — وش هي الضمانات القانونية للمواطن في تونس؟
+**Expected:** Le droit à un procès équitable, la liberté d'expression et le droit à la défense.
+**Article ref:** Constitution et droit tunisien.
 
 ### Q24 — سؤال مالوش علاقة بالقانون (يجب الرد بالرسالة الراجعة)
 **Query:** وشachel PSG في آخر مباراة؟
-**Expected:** لا يجب أن يجيب بنص قانوني. يجب أن يُرجع رسالة الارتجاع (fallback) بالدارجة التونسية.
-**Expected fallback:** "ما لقيتش معلومات قانونية على هذا السؤال، أعد صياغته أو اسأل على موضوع قانوني."
+**Expected:** Ne doit pas répondre par un texte juridique. Doit renvoyer le message de repli (fallback) en français.
+**Expected fallback:** "Je n'ai pas trouvé d'informations suffisantes dans le corpus juridique pour répondre à cette question."
 
-### Q25 — سؤال م模糊 (يجب التوضيح أو الرد)
+### Q25 — سؤال غامض (يجب التوضيح أو الرد)
 **Query:** قانون
-**Expected:** قد يحتاج للسؤال 회사 أو يُرجع برسالة تطلب توضيح.
+**Expected:** La question est trop vague; il convient de demander des précisions à l'utilisateur.

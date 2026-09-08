@@ -8,16 +8,14 @@ from typing import Any
 
 import structlog
 
-from mustachar.pipeline.generator import generate
+from mustachar.pipeline.generator import FALLBACK_FRENCH, generate
 from mustachar.pipeline.reformulator import reformulate
 from mustachar.pipeline.stt import speech_to_text
 
 logger = structlog.get_logger()
 
-FALLBACK_STT = "ما فهمتش الصوت. حاول مرة أخرى أحسن."
-FALLBACK_GENERATE = (
-    "ما لقيتش معلومات كافية في القانون على هالسؤال. حلّي تسأل محامي باش يعطيك إجابة أدق."
-)
+FALLBACK_STT = "Je n'ai pas compris l'audio. Essayez de reformuler."
+FALLBACK_GENERATE = FALLBACK_FRENCH
 
 
 @dataclass
@@ -41,12 +39,12 @@ async def run_pipeline(
 
     Stages:
       1. STT — speech-to-text (Darja transcript)
-      2. Reformulate — Darja → MSA legal query
+      2. Reformulate — Darja → French legal query
       3. Retrieve — vector search over legal corpus
-      4. Generate — grounded LLM answer
+      4. Generate — grounded French LLM answer
       5. TTS — text-to-speech (not collected here; streaming handled by caller)
 
-    STT and generation failures return a Darja fallback message; reformulation
+    STT and generation failures return a French fallback message; reformulation
     errors degrade to the raw transcript. Per-stage latency is logged as
     structured JSON.
     """

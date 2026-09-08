@@ -1,4 +1,4 @@
-"""Grounded reasoning pipeline stage: RAG generation with zero-hallucination prompt."""
+"""Grounded reasoning pipeline stage: French RAG generation with zero-hallucination prompt."""
 
 from __future__ import annotations
 
@@ -12,21 +12,27 @@ from mustachar.pipeline.retrieval import DEFAULT_N_RESULTS, retrieve
 
 logger = structlog.get_logger()
 
-FALLBACK_DARJA = (
-    "ما لقيتش معلومات كافية في القانون على هالسؤال. حلّي تسأل محامي باش يعطيك إجابة أدق."
+FALLBACK_FRENCH = (
+    "Je n'ai pas trouvé d'informations suffisantes dans le corpus juridique pour "
+    "répondre à cette question. Reformulez votre demande ou consultez un avocat pour "
+    "une réponse plus précise."
 )
 
 SYSTEM_PROMPT = """\
-أنت مستشار قانوني تونسي ذكي. مهمتك الإجابة على أسئلة المستخدم بناءً \
-الكلي على النصوص القانونية المقدّمة في السياق فقط.
+Vous êtes un conseiller juridique tunisien. Votre rôle est de répondre aux \
+questions de l'utilisateur en vous appuyant exclusivement sur les textes \
+juridiques fournis dans le contexte.
 
-قواعد صارمة:
-1. استخدم فقط المعلومات الموجودة في السياق. لا تختلق أو ت倒在 أي معلومة خارج السياق.
-2. عند الإجابة، اذكر دائماً الفصل (Fasl) والمجلة (Majalla) المستخدمة.
-3. الجواب لازم يكون بالدارجة التونسية مكتوبة بالحروف العربية.
-4. إذا السياق ما فيهش إجابة واضحة، قول "ما لقيتش إجابة واضحة في القانون على هالسؤال".
-5. لا تكتب بالفرنسية أو الإنجليزية في الجواب.
-6. كن مختصراً ومباشرًا في الإجابة.
+Règles strictes :
+1. Utilisez uniquement les informations du contexte. N'inventez jamais une \
+information absente du contexte.
+2. Toute réponse affirmative doit obligatoirement citer le Fasl (article) et \
+la Majalla (code) utilisés, tels qu'ils figurent dans le contexte.
+3. Répondez en français, de manière concise et directe, en prose claire.
+4. Si le contexte ne contient aucune réponse claire, répondez : "Je n'ai pas \
+trouvé d'informations suffisantes dans le corpus juridique pour répondre à \
+cette question."
+5. Restez bref : quelques phrases courtes, sans préambule ni conclusion inutile.
 """
 
 
@@ -37,7 +43,7 @@ def _build_context_block(hits: list[dict[str, Any]]) -> str:
         source = hit.get("source", "")
         article = hit.get("article", "")
         content = hit.get("content", "")
-        parts.append(f"[{i}] المصدر: {source} | {article}\n{content}")
+        parts.append(f"[{i}] Source: {source} | {article}\n{content}")
     return "\n\n".join(parts)
 
 
@@ -50,7 +56,7 @@ async def generate(
     """Run retrieval then grounded generation.
 
     Returns a dict with:
-      - ``answer``: the generated Darja response
+      - ``answer``: the generated French response
       - ``hits``: the retrieval results used
       - ``fallback``: whether the fallback message was returned
       - ``latency_ms``: total latency for retrieval + generation
@@ -67,7 +73,7 @@ async def generate(
             latency_ms=round(elapsed_ms, 1),
         )
         return {
-            "answer": FALLBACK_DARJA,
+            "answer": FALLBACK_FRENCH,
             "hits": hits,
             "fallback": True,
             "latency_ms": round(elapsed_ms, 1),
@@ -80,7 +86,8 @@ async def generate(
         {
             "role": "user",
             "content": (
-                f"السياق القانوني:\n\n{context_block}\n\nسؤال المستخدم:\n{query}"
+                f"Contexte juridique :\n\n{context_block}\n\nQuestion de "
+                f"l'utilisateur :\n{query}"
             ),
         },
     ]

@@ -70,7 +70,7 @@ MustacharAI utilizes a decoupled, asynchronous pipeline where heavy neural compu
                   ┌─────────────────────────────────────────┐
                   │ 2. Semantic Query Reformulator (allam)  │
                   └────────────────────┬────────────────────┘
-                                       │ MSA Legal Terms (~50ms)
+                                       │ French Legal Terms (~50ms)
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │ 3. Dense Vector Retrieval (ChromaDB)    │
@@ -80,7 +80,7 @@ MustacharAI utilizes a decoupled, asynchronous pipeline where heavy neural compu
                   ┌─────────────────────────────────────────┐
                   │  4. Grounded Reasoning Engine (allam)   │
                   └────────────────────┬────────────────────┘
-                                       │ Darja Text in Arabic Script (~250ms)
+                                       │ French Grounded Answer (~250ms)
                                        ▼
                   ┌─────────────────────────────────────────┐
                   │  5. Neural Audio Synthesizer (Edge-TTS) │
@@ -101,7 +101,7 @@ To maintain natural voice interaction, total processing time is capped at **~680
 | Pipeline Stage | Sub-System | Target Latency | Optimization Mechanism |
 | --- | --- | --- | --- |
 | **Stage 1: STT** | Groq `whisper-large-v3` | **~150 ms** | Cloud LPU acceleration with language prompt forcing |
-| **Stage 2: Reformulation** | Groq `allam-2-7b` | **~50 ms** | Low token generation ($<30$ tokens) for MSA keyword mapping |
+| **Stage 2: Reformulation** | Groq `allam-2-7b` | **~50 ms** | Low token generation ($<30$ tokens) for French keyword mapping |
 | **Stage 3: Vector Search** | Local ChromaDB / `multilingual-e5-small` | **~30 ms** | Pre-computed embeddings with HNSW indexing |
 | **Stage 4: LLM Generation** | Groq `allam-2-7b` | **~250 ms** | High token throughput ($>250$ t/s) with low temperature |
 | **Stage 5: TTS Synthesis** | Microsoft Edge-TTS | **~200 ms** | Direct byte-stream audio output buffering |
@@ -118,7 +118,7 @@ Direct semantic lookup between raw Darja audio transcripts and MSA legal vectors
 Standard fixed-character chunking (e.g., 500-token splitting) destroys legal semantics by cutting clauses mid-sentence. MustacharAI enforces **Regex Structural Chunking**, isolating legal units strictly by statutory markers (*`r"(?=\b(?:الفصل|Article)\s+...)"`*). This ensures every vector chunk contains a complete, self-contained legal rule.
 
 ### Principle 3: Phonetic Script Alignment for TTS
-Neural TTS engines for Arabic dialects require text formatted strictly in **Arabic Script**. Generating dialectal responses in Arabizi/Franco-Arab (*e.g., "3aslema"*) causes speech synthesis artifacts. System prompts strictly constrain the LLM generation layer to output dialectal Tunisian written entirely in Arabic characters (*e.g., "عصلمة، حسب الفصل..."*).
+Neural TTS engines require text formatted strictly in the target language's script: Arabic dialects need **Arabic Script** (Arabizi/Franco-Arab like "3aslema" causes synthesis artifacts), French needs French orthography. The generation stage therefore outputs the pipeline's answer language directly — French for grounded answers — and the TTS stage selects a matching voice (e.g., `fr-FR-HenriNeural`), keeping script and voice aligned to what the user actually hears.
 
 ### Principle 4: Decoupled Edge/Cloud Compute
 By delegating neural inference (STT and LLM generation) to Groq's cloud-hosted LPUs, host servers require no local GPU hardware. Host machines only run lightweight embedding vector searches and audio socket streaming, allowing the system to scale cost-effectively on standard CPU cloud infrastructure.
@@ -140,7 +140,7 @@ By delegating neural inference (STT and LLM generation) to Groq's cloud-hosted L
  ┌────────────────────────────────────────────────────────────────────────┐
  │  EXTERNAL CLOUD API SERVICES                                           │
  │  ├── Groq LPU Cluster: Whisper-v3 STT & allam-2-7b LLM                 │
- │  └── Microsoft Neural Network: Edge-TTS Engine (`ar-TN-HediNeural`)    │
+ │  └── Microsoft Neural Network: Edge-TTS Engine (`fr-FR-HenriNeural`)    │
  └────────────────────────────────────────────────────────────────────────┘
 ```
 

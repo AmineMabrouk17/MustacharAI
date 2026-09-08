@@ -45,7 +45,7 @@ export function ChatHistory({ messages }: ChatHistoryProps) {
                 : "bg-emerald-900/40 text-zinc-100 rounded-tl-sm"
             }`}
           >
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
               {msg.text}
             </p>
 

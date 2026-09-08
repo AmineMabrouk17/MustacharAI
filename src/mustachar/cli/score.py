@@ -19,6 +19,7 @@ import asyncio
 import json
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -39,8 +40,47 @@ QA_RE = re.compile(r"(?m)^(###\s+Q\d+.*)$")
 QA_HEADING_RE = re.compile(r"^\s*###\s+(Q\d+)\s+[—-]\s+(.*)$")
 FIELD_RE = re.compile(r"^\*\*(?P<key>.*?):\*\*\s*(?P<val>.*)$")
 ARABIC_RE = re.compile(r"[\u0600-\u06FF]+")
+FRENCH_WORD_RE = re.compile(r"[a-z]+")
 
-CITATION_HINTS = ("فصل", "المادة", "مادة", "مجلة")
+CITATION_HINTS = ("fasl", "majalla", "article", "فصل", "المادة", "مادة", "مجلة")
+
+FRENCH_STOPWORDS = {
+    "dans",
+    "des",
+    "avec",
+    "pour",
+    "que",
+    "qui",
+    "sur",
+    "pas",
+    "plus",
+    "est",
+    "sont",
+    "une",
+    "aux",
+    "par",
+    "les",
+    "son",
+    "ses",
+    "sa",
+    "ce",
+    "cet",
+    "cette",
+    "leur",
+    "leurs",
+    "tout",
+    "toute",
+    "tous",
+    "toutes",
+    "plusieurs",
+    "certains",
+    "selon",
+    "compte",
+    "doit",
+    "deux",
+    "entre",
+    "doivent",
+}
 
 FALLBACK_QIDS = {"Q24", "Q25"}
 
@@ -135,8 +175,12 @@ def parse_qa_pairs(path: Path) -> list[QAPair]:
 
 def _normalize_arabic(token: str) -> str:
     """Normalize a token for lenient root matching across inflections."""
-    t = "".join(ch for ch in token if "\u0600" <= ch <= "\u06FF")
-    t = t.replace("\u0622", "\u0627").replace("\u0623", "\u0627").replace("\u0625", "\u0627")
+    t = "".join(ch for ch in token if "\u0600" <= ch <= "\u06ff")
+    t = (
+        t.replace("\u0622", "\u0627")
+        .replace("\u0623", "\u0627")
+        .replace("\u0625", "\u0627")
+    )
     t = t.replace("\u0629", "")
     for prefix in ("\u0648\u0627\u0644", "\u0641\u0627\u0644", "\u0627\u0644"):
         if t.startswith(prefix):
@@ -157,28 +201,44 @@ def _ar_content_words(text: str) -> set[str]:
     return words
 
 
+def _fr_content_words(text: str) -> set[str]:
+    """Extract de-accented French content words (drops stopwords)."""
+    decomposed = unicodedata.normalize("NFKD", text).casefold()
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return {
+        word
+        for word in FRENCH_WORD_RE.findall(stripped)
+        if len(word) >= 4 and word not in FRENCH_STOPWORDS
+    }
+
+
 def _shares_principle(answer: str, expected: str) -> bool:
-    """True when an answer shares a root word with the expected principle."""
-    expected_words = _ar_content_words(expected)
-    if not expected_words:
+    """True when an answer shares a content word with the expected principle.
+
+    Matches either normalized Arabic roots (across inflections) or French
+    content words, whichever the expected principle is written in.
+    """
+    ar_expected = _ar_content_words(expected)
+    fr_expected = _fr_content_words(expected)
+    if not ar_expected and not fr_expected:
         return True
-    answer_words = _ar_content_words(answer)
-    for e in expected_words:
-        for a in answer_words:
-            if e in a or a in e:
-                return True
-    return False
+    ar_overlap = any(
+        e in a or a in e for e in ar_expected for a in _ar_content_words(answer)
+    )
+    fr_overlap = bool(fr_expected & _fr_content_words(answer))
+    return ar_overlap or fr_overlap
 
 
 def _mentions_citation(answer: str, hits: list[dict[str, Any]]) -> bool:
     """True when the answer references a Fasl/Majalla article citation."""
     if not answer:
         return False
+    normalized = answer.casefold()
     for hit in hits:
         article = hit.get("article", "")
-        if article and article in answer:
+        if article and article.casefold() in normalized:
             return True
-    return any(hint in answer for hint in CITATION_HINTS)
+    return any(hint in normalized for hint in CITATION_HINTS)
 
 
 def score_pair(
@@ -280,7 +340,9 @@ def _check(c: bool | None) -> str:
 
 def print_report(scores: list[QAScore]) -> None:
     """Print a stable per-query table plus summary score."""
-    print(f"{'Query':<6}{'Fallback':<9}{'Grounded':<9}{'Citation':<9}{'Principle':<10}Result")
+    print(
+        f"{'Query':<6}{'Fallback':<9}{'Grounded':<9}{'Citation':<9}{'Principle':<10}Result"
+    )
     for s in scores:
         result = "PASS" if s.passed else "FAIL"
         print(

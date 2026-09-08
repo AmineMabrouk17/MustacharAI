@@ -173,7 +173,8 @@ async def stream(websocket: WebSocket) -> None:
                     websocket,
                     {
                         "type": "answer",
-                        "text": "صارت مشكلة في المعالجة. حاول مرة أخرى.",
+                        "text": "Une erreur est survenue pendant le traitement. "
+                        "Veuillez réessayer.",
                         "citations": [],
                         "fallback": True,
                         "latency_ms": 0,
