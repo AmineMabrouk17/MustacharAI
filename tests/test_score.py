@@ -10,6 +10,7 @@ from mustachar.cli.score import (
     MAX_ATTEMPTS,
     QAPair,
     _ar_content_words,
+    _fr_content_words,
     _mentions_citation,
     _normalize_arabic,
     _shares_principle,
@@ -27,23 +28,23 @@ QA_MARKDOWN = """\
 ## 1. قانون الالتزامات والعقود
 
 ### Q1 — ما هي العقدة وأركانها الأساسية؟
-**Expected:** العقد هو اتفاق طرفين على تأثير التزام. أركانه: التراضي، الأهلية.
-**Article ref:** المادة 1 من قانون الالتزامات والعقود.
+**Expected:** Le contrat est un accord entre deux parties destiné à créer des obligations.
+**Article ref:** Art. 1 du Code des Obligations et des Contrats.
 
 ### Q2 — كيفاش تعمل الإقالة في القانون التونسي؟
-**Expected:** الإقالة هي اتفاق على إلغاء العقد.
-**Article ref:** فصل من قانون الالتزامات والعقود.
+**Expected:** La résiliation conventionnelle est un accord visant à dissoudre le contrat.
+**Article ref:** Fasl du Code des Obligations et des Contrats.
 
 ## 8. أسئلة متنوعة
 
 ### Q24 — سؤال مالوش علاقة بالقانون
 **Query:** وشachel PSG في آخر مباراة؟
-**Expected:** لا يجب أن يجيب بنص قانوني.
-**Expected fallback:** "ما لقيتش معلومات قانونية على هذا السؤال."
+**Expected:** Ne doit pas répondre par un texte juridique.
+**Expected fallback:** "Je n'ai trouvé aucune information juridique sur cette question."
 
 ### Q25 — سؤال م模糊
 **Query:** قانون
-**Expected:** قد يحتاج للسؤال أو يُرجع برسالة تطلب توضيح.
+**Expected:** Il convient de demander des précisions.
 """
 
 
@@ -51,8 +52,8 @@ def _qa_pair(qid: str, *, expect_fallback: bool = False) -> QAPair:
     return QAPair(
         qid=qid,
         query="سؤال",
-        expected="العقد اتفاق والأهلية المعاملة.",
-        article_ref="المادة 1",
+        expected="Le contrat exige le consentement et la capacité des parties.",
+        article_ref="Art. 1",
         expect_fallback=expect_fallback,
     )
 
@@ -64,7 +65,7 @@ def test_parse_qa_pairs_loads_all_queries(tmp_path: Path) -> None:
     assert [p.qid for p in pairs] == ["Q1", "Q2", "Q24", "Q25"]
     assert pairs[0].query == "ما هي العقدة وأركانها الأساسية؟"
     assert pairs[0].expect_fallback is False
-    assert "اتفاق" in pairs[0].expected
+    assert "contrat" in pairs[0].expected
     assert pairs[0].category == "قانون الالتزامات والعقود"
 
 
@@ -87,6 +88,14 @@ def test_ar_content_words_ignores_non_arabic_and_short_tokens() -> None:
     assert all(len(w) >= 3 for w in words)
 
 
+def test_french_content_words_strips_accents_and_stopwords() -> None:
+    words = _fr_content_words("Le contrat de la capacité selon le Code")
+    assert "contrat" in words
+    assert "capacite" in words
+    assert "code" in words
+    assert not any(w in words for w in ("le", "de", "la", "selon"))
+
+
 def test_normalize_arabic_unifies_alef_and_drops_prefix() -> None:
     assert _normalize_arabic("الإقالة") == "اقال"
     assert _normalize_arabic("الأهلية") == "اهلي"
@@ -102,19 +111,33 @@ def test_shares_principle_finds_root_overlap() -> None:
     assert not _shares_principle("لا يمكن أن يكون", "القتل العقوبة")
 
 
+def test_shares_principle_matches_french_content_words() -> None:
+    assert _shares_principle(
+        "Selon le fasl 5, le contrat exige la capacité des parties.",
+        "Le contrat exige le consentement et la capacité des parties.",
+    )
+    assert not _shares_principle(
+        "le mariage est conclu devant le notaire",
+        "la peine varie selon la valeur du bien volé",
+    )
+
+
 def test_mentions_citation_uses_hit_article() -> None:
     hits: list[dict[str, Any]] = [{"article": "المادة 12"}]
     assert _mentions_citation("نص المادة 12 من المجلة", hits)
     assert _mentions_citation("ينص الفصل على ذلك", [])
+    assert _mentions_citation("Selon le fasl 5 de la majalla", [])
+    assert _mentions_citation("Réponse fondée sur l'article 2", [])
     assert not _mentions_citation("الجواب فقط", [])
+    assert not _mentions_citation("La réponse seulement", [])
 
 
 def test_score_pair_grounded_passes() -> None:
     qa = _qa_pair("Q1")
     score = score_pair(
         qa,
-        answer="العقد اتفاق بين الطرفين من المادة 1.",
-        hits=[{"article": "المادة 1"}],
+        answer="Le contrat exige le consentement et la capacité selon l'art. 1.",
+        hits=[{"article": "Art. 1"}],
         fallback=False,
     )
     assert score.passed is True
@@ -128,7 +151,7 @@ def test_score_pair_grounded_fails_on_fallback() -> None:
     qa = _qa_pair("Q1")
     score = score_pair(
         qa,
-        answer="ما لقيتش معلومات كافية في القانون.",
+        answer="Je n'ai pas trouvé d'informations suffisantes dans le corpus juridique.",
         hits=[],
         fallback=True,
     )
@@ -141,7 +164,7 @@ def test_score_pair_fallback_expected_passes() -> None:
     qa = _qa_pair("Q24", expect_fallback=True)
     score = score_pair(
         qa,
-        answer="ما لقيتش معلومات قانونية على هذا السؤال.",
+        answer="Je n'ai trouvé aucune information juridique sur cette question.",
         hits=[],
         fallback=True,
     )
@@ -156,8 +179,8 @@ def test_score_pair_fallback_expected_fails_when_grounded_answer() -> None:
     qa = _qa_pair("Q24", expect_fallback=True)
     score = score_pair(
         qa,
-        answer="PSG فاز في المباراة.",
-        hits=[{"article": "المادة 1"}],
+        answer="Le PSG a gagné le match.",
+        hits=[{"article": "Art. 1"}],
         fallback=False,
     )
     assert score.passed is False
@@ -218,16 +241,12 @@ class _AlwaysEmpty:
 @pytest.mark.asyncio
 async def test_with_retry_retries_invalid_result() -> None:
     empty_first = _EmptyFirst()
-    assert (
-        await _with_retry(empty_first, attempts=3, delay_ms=1, ok=bool) == "usable"
-    )
+    assert await _with_retry(empty_first, attempts=3, delay_ms=1, ok=bool) == "usable"
     assert empty_first.calls == 2
 
 
 @pytest.mark.asyncio
 async def test_with_retry_returns_last_result_when_all_invalid() -> None:
     always_empty = _AlwaysEmpty()
-    assert (
-        await _with_retry(always_empty, attempts=3, delay_ms=1, ok=bool) == ""
-    )
+    assert await _with_retry(always_empty, attempts=3, delay_ms=1, ok=bool) == ""
     assert always_empty.calls == 3

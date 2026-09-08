@@ -7,7 +7,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-DEFAULT_VOICE = "ar-TN-HediNeural"
+DEFAULT_VOICE = "fr-FR-HenriNeural"
 
 
 async def synthesize(text: str, voice: str = DEFAULT_VOICE) -> AsyncIterator[bytes]:

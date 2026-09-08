@@ -1,6 +1,6 @@
 # Threshold Short-Circuit
 
-When Stage 3 (Retrieval) returns no chunks above the cosine similarity threshold, Stage 4 (LLM Generation) is skipped entirely. A pre-written static Darja fallback response is returned immediately.
+When Stage 3 (Retrieval) returns no chunks above the cosine similarity threshold, Stage 4 (LLM Generation) is skipped entirely. A pre-written static French fallback response is returned immediately.
 
 _Amendment (issue #16): the threshold is cosine similarity, not L2 distance. The collection is created with `hnsw:space: cosine`, so Chroma returns cosine distances (0 = identical). Chunks are kept when `distance <= 1.0 - threshold`._
 

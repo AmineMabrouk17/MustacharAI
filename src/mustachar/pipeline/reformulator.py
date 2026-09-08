@@ -1,4 +1,4 @@
-"""Query reformulation pipeline stage: Darja → MSA legal search terms."""
+"""Query reformulation pipeline stage: Darja → French legal search terms."""
 
 from __future__ import annotations
 
@@ -37,10 +37,10 @@ FALLBACK_RESULT: dict[str, Any] = {
 
 
 async def reformulate(darja_query: str) -> dict[str, Any]:
-    """Reformulate a Darja query into MSA legal search terms.
+    """Reformulate a Darja query into French legal search terms.
 
     Returns a dict with:
-      - ``primary_query``: the MSA search string
+      - ``primary_query``: the French search string
       - ``keywords``: list of legal keywords
       - ``latency_ms``: wall-clock latency
     """

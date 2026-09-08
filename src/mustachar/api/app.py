@@ -15,7 +15,7 @@ class SpeakRequest(BaseModel):
     """Payload for the ``/api/v1/speak`` endpoint."""
 
     text: str = Field(..., min_length=1, max_length=5000)
-    voice: str = Field(default="ar-TN-HediNeural")
+    voice: str = Field(default="fr-FR-HenriNeural")
 
 
 def create_app() -> FastAPI:

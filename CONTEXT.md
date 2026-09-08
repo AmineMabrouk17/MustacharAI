@@ -9,7 +9,7 @@ One discrete unit in the voice-to-voice flow (STT → Reformulation → Retrieva
 _Avoid_: step, phase, component
 
 **Reformulation**:
-Translating spoken Darja intent into formal MSA legal search terms for vector retrieval.
+Translating spoken Darja intent into French legal search terms for vector retrieval (the corpus is indexed in French).
 _Avoid_: translation, transformation, mapping
 
 **Fasl (فصل)**:
