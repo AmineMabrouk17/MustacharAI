@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ChatHistory, type ChatMessage } from "./ChatHistory";
+import { ChatHistory } from "./ChatHistory";
 import { PipelineStatusIndicator } from "./PipelineStatus";
 import { WaveformVisualizer } from "./WaveformVisualizer";
+import { useChatHistory } from "@/hooks/useChatHistory";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import {
@@ -26,7 +27,7 @@ function nextId(): string {
 
 export function ChatInterface() {
   const [status, setStatus] = useState<PipelineStatus>("idle");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, setMessages, clearHistory } = useChatHistory();
 
   const { status: playbackStatus, enqueueAudio } = useAudioPlayback();
 
@@ -78,7 +79,7 @@ export function ChatInterface() {
         { id: nextId(), role: "user", text, timestamp: Date.now() },
       ]);
     },
-    []
+    [setMessages]
   );
 
   const handleAnswer = useCallback(
@@ -95,7 +96,7 @@ export function ChatInterface() {
         },
       ]);
     },
-    []
+    [setMessages]
   );
 
   const { isConnected, sendAudio, sendEnd } = useWebSocket({
@@ -136,6 +137,12 @@ export function ChatInterface() {
     }
   }, [isRecording, sendEnd, startRecording, stopRecording]);
 
+  const handleClearHistory = useCallback(() => {
+    transcriptBubbleRef.current = null;
+    partialTextRef.current = "";
+    clearHistory();
+  }, [clearHistory]);
+
   return (
     <div className="flex flex-col h-screen p-4" dir="rtl">
       <div className="flex-1 flex flex-col w-full max-w-2xl mx-auto gap-4 overflow-hidden">
@@ -148,15 +155,25 @@ export function ChatInterface() {
         {/* Status bar */}
         <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-3 shrink-0">
           <PipelineStatusIndicator status={displayStatus} />
-          <div className="flex items-center gap-2">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected ? "bg-emerald-500" : "bg-red-500"
-              }`}
-            />
-            <span className="text-xs text-zinc-400">
-              {isConnected ? "متصل" : "غير متصل"}
-            </span>
+          <div className="flex items-center gap-3">
+            {messages.length > 0 && (
+              <button
+                onClick={handleClearHistory}
+                className="text-xs text-zinc-400 hover:text-red-400 transition-colors"
+              >
+                مسح المحادثة
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isConnected ? "bg-emerald-500" : "bg-red-500"
+                }`}
+              />
+              <span className="text-xs text-zinc-400">
+                {isConnected ? "متصل" : "غير متصل"}
+              </span>
+            </div>
           </div>
         </div>
 

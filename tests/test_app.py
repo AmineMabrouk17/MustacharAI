@@ -32,7 +32,14 @@ def _make_pipeline_result(
         transcript=transcript,
         reformulated_query="استعلام بالفصحى",
         answer=answer,
-        citations=[{"source": "a.pdf", "article": "المادة 1", "content": "نص القانون"}],
+        citations=[
+            {
+                "source": "a.pdf",
+                "article": "المادة 1",
+                "content": "نص القانون",
+                "category": "مجلة الشغل",
+            }
+        ],
         fallback=False,
         stage_latencies_ms={
             "stt": 100.0,
@@ -80,6 +87,7 @@ async def test_ask_returns_pipeline_result(mock_pipeline: AsyncMock) -> None:
     assert body["answer"] == "جواب من القانون"
     assert body["fallback"] is False
     assert len(body["citations"]) == 1
+    assert body["citations"][0]["category"] == "مجلة الشغل"
 
 
 # ── REST /api/v1/speak endpoint ─────────────────────────────────
