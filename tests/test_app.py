@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from mustachar.api.app import app
+from mustachar.api.ratelimit import _hits
 from mustachar.pipeline.orchestrator import PipelineResult
 
 if TYPE_CHECKING:
@@ -32,7 +33,14 @@ def _make_pipeline_result(
         transcript=transcript,
         reformulated_query="استعلام بالفصحى",
         answer=answer,
-        citations=[{"source": "a.pdf", "article": "المادة 1", "content": "نص القانون"}],
+        citations=[
+            {
+                "source": "a.pdf",
+                "article": "المادة 1",
+                "content": "نص القانون",
+                "category": "مجلة الشغل",
+            }
+        ],
         fallback=False,
         stage_latencies_ms={
             "stt": 100.0,
@@ -80,6 +88,7 @@ async def test_ask_returns_pipeline_result(mock_pipeline: AsyncMock) -> None:
     assert body["answer"] == "جواب من القانون"
     assert body["fallback"] is False
     assert len(body["citations"]) == 1
+    assert body["citations"][0]["category"] == "مجلة الشغل"
 
 
 # ── REST /api/v1/speak endpoint ─────────────────────────────────
@@ -261,3 +270,43 @@ def test_ws_graceful_disconnect() -> None:
         ws.send_json({"type": "end"})
         status = ws.receive_json()
         assert status["type"] == "status"
+
+
+def test_rate_limit_blocks_after_15_per_minute() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    codes = [client.get("/api/v1/stream").status_code for _ in range(15)]
+    assert 429 not in codes
+    assert client.get("/api/v1/stream").status_code == 429
+    _hits.clear()
+
+
+def test_rate_limit_passes_non_api_routes() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    assert client.get("/health").status_code == 200
+    assert _hits == {}
+    _hits.clear()
+
+
+def test_rate_limit_uses_cf_connecting_ip() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    codes = [
+        client.get(
+            "/api/v1/stream", headers={"CF-Connecting-IP": "1.2.3.4"}
+        ).status_code
+        for _ in range(15)
+    ]
+    assert 429 not in codes
+    assert (
+        client.get(
+            "/api/v1/stream", headers={"CF-Connecting-IP": "1.2.3.4"}
+        ).status_code
+        == 429
+    )
+    # A different client IP is not blocked.
+    assert client.get(
+        "/api/v1/stream", headers={"CF-Connecting-IP": "5.6.7.8"}
+    ).status_code in (404, 405)
+    _hits.clear()

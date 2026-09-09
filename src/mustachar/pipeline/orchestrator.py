@@ -129,6 +129,7 @@ async def _run_post_stt(result: PipelineResult, pipeline_start: float) -> None:
                 "source": hit.get("source", ""),
                 "article": hit.get("article", ""),
                 "content": hit.get("content", "")[:200],
+                "category": hit.get("category", ""),
             }
             for hit in gen_result.get("hits", [])
         ]

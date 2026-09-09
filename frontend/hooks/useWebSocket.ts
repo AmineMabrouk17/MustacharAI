@@ -8,6 +8,7 @@ export interface Citation {
   source: string;
   article: string;
   content: string;
+  category?: string;
 }
 
 export interface TranscriptMessage {
