@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from mustachar.api.websocket import router as ws_router
 from mustachar.core.settings import settings
+from mustachar.infra.edge_tts_client import DEFAULT_VOICE
 from mustachar.pipeline.orchestrator import run_pipeline
 from mustachar.pipeline.tts import tts_full
 
@@ -15,7 +16,7 @@ class SpeakRequest(BaseModel):
     """Payload for the ``/api/v1/speak`` endpoint."""
 
     text: str = Field(..., min_length=1, max_length=5000)
-    voice: str = Field(default="fr-FR-HenriNeural")
+    voice: str = Field(default=DEFAULT_VOICE)
 
 
 def create_app() -> FastAPI:

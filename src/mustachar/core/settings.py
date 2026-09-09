@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     groq_stt_model: str = "whisper-large-v3"
     chroma_persist_dir: str = "data/chroma_db"
     retrieval_threshold: float = 0.84
+    tts_voice: str = "fr-FR-HenriNeural"
 
 
 settings = Settings()
