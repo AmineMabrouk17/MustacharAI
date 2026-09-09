@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+from mustachar.api.ratelimit import RateLimitMiddleware
 from mustachar.api.websocket import router as ws_router
 from mustachar.core.settings import settings
 from mustachar.infra.edge_tts_client import DEFAULT_VOICE
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(RateLimitMiddleware)
 
     app.include_router(ws_router)
 

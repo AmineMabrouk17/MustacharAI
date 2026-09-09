@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from starlette.testclient import TestClient
 
 from mustachar.api.app import app
+from mustachar.api.ratelimit import _hits
 from mustachar.pipeline.orchestrator import PipelineResult
 
 if TYPE_CHECKING:
@@ -269,3 +270,43 @@ def test_ws_graceful_disconnect() -> None:
         ws.send_json({"type": "end"})
         status = ws.receive_json()
         assert status["type"] == "status"
+
+
+def test_rate_limit_blocks_after_15_per_minute() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    codes = [client.get("/api/v1/stream").status_code for _ in range(15)]
+    assert 429 not in codes
+    assert client.get("/api/v1/stream").status_code == 429
+    _hits.clear()
+
+
+def test_rate_limit_passes_non_api_routes() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    assert client.get("/health").status_code == 200
+    assert _hits == {}
+    _hits.clear()
+
+
+def test_rate_limit_uses_cf_connecting_ip() -> None:
+    _hits.clear()
+    client = TestClient(app)
+    codes = [
+        client.get(
+            "/api/v1/stream", headers={"CF-Connecting-IP": "1.2.3.4"}
+        ).status_code
+        for _ in range(15)
+    ]
+    assert 429 not in codes
+    assert (
+        client.get(
+            "/api/v1/stream", headers={"CF-Connecting-IP": "1.2.3.4"}
+        ).status_code
+        == 429
+    )
+    # A different client IP is not blocked.
+    assert client.get(
+        "/api/v1/stream", headers={"CF-Connecting-IP": "5.6.7.8"}
+    ).status_code in (404, 405)
+    _hits.clear()
