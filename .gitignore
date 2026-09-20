@@ -43,6 +43,9 @@ Thumbs.db
 data/chroma_db/
 data/raw_pdfs/
 
+# Arabic RAG chatbot index
+chroma_db/
+
 # Frontend
 frontend/node_modules/
 frontend/.next/
