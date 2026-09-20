@@ -12,20 +12,10 @@ const statusConfig: Record<PipelineStatus, { label: string; color: string; icon:
     color: "text-zinc-400",
     icon: "●",
   },
-  listening: {
-    label: "يسمع",
-    color: "text-emerald-400",
-    icon: "🎙️",
-  },
   processing: {
     label: "يعالج",
     color: "text-amber-400",
     icon: "⚡",
-  },
-  speaking: {
-    label: "يتحدث",
-    color: "text-blue-400",
-    icon: "🔊",
   },
 };
 
@@ -39,24 +29,8 @@ export function PipelineStatusIndicator({ status }: PipelineStatusIndicatorProps
       </span>
       {status !== "idle" && (
         <span className="relative flex h-2 w-2">
-          <span
-            className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
-              status === "listening"
-                ? "bg-emerald-400"
-                : status === "processing"
-                  ? "bg-amber-400"
-                  : "bg-blue-400"
-            }`}
-          />
-          <span
-            className={`relative inline-flex h-2 w-2 rounded-full ${
-              status === "listening"
-                ? "bg-emerald-500"
-                : status === "processing"
-                  ? "bg-amber-500"
-                  : "bg-blue-500"
-            }`}
-          />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
         </span>
       )}
     </div>

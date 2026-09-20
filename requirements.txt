@@ -1,0 +1,9 @@
+streamlit
+langchain
+langchain-community
+langchain-google-genai
+chromadb
+pymupdf
+arabic-reshaper
+python-bidi
+python-dotenv

@@ -2,20 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type PipelineStatus = "idle" | "listening" | "processing" | "speaking";
+export type PipelineStatus = "idle" | "processing";
 
 export interface Citation {
   source: string;
   article: string;
   content: string;
   category?: string;
-}
-
-export interface TranscriptMessage {
-  type: "transcript";
-  partial?: boolean;
-  darja_text: string;
-  latency_ms: number;
 }
 
 export interface AnswerMessage {
@@ -31,22 +24,18 @@ export interface StatusMessage {
   stage: PipelineStatus;
 }
 
-export type WSMessage = TranscriptMessage | AnswerMessage | StatusMessage;
+export type WSMessage = AnswerMessage | StatusMessage;
 
 interface UseWebSocketOptions {
   url: string;
-  onAudioReceived?: (audioData: Blob) => void;
   onStatusChange?: (status: PipelineStatus) => void;
-  onTranscript?: (text: string, latencyMs: number, partial: boolean) => void;
   onAnswer?: (text: string, citations: Citation[], fallback: boolean) => void;
   onError?: (error: Event) => void;
 }
 
 export function useWebSocket({
   url,
-  onAudioReceived,
   onStatusChange,
-  onTranscript,
   onAnswer,
   onError,
 }: UseWebSocketOptions) {
@@ -55,19 +44,15 @@ export function useWebSocket({
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState<PipelineStatus>("idle");
 
-  const onAudioReceivedRef = useRef(onAudioReceived);
   const onStatusChangeRef = useRef(onStatusChange);
-  const onTranscriptRef = useRef(onTranscript);
   const onAnswerRef = useRef(onAnswer);
   const onErrorRef = useRef(onError);
 
   useEffect(() => {
-    onAudioReceivedRef.current = onAudioReceived;
     onStatusChangeRef.current = onStatusChange;
-    onTranscriptRef.current = onTranscript;
     onAnswerRef.current = onAnswer;
     onErrorRef.current = onError;
-  }, [onAudioReceived, onStatusChange, onTranscript, onAnswer, onError]);
+  }, [onStatusChange, onAnswer, onError]);
 
   const updateStatus = useCallback((newStatus: PipelineStatus) => {
     setStatus(newStatus);
@@ -78,7 +63,6 @@ export function useWebSocket({
     const id = ++connectionIdRef.current;
 
     const ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -89,30 +73,18 @@ export function useWebSocket({
 
     ws.onmessage = (event) => {
       if (connectionIdRef.current !== id) return;
-      if (event.data instanceof ArrayBuffer) {
-        const blob = new Blob([event.data], { type: "audio/mpeg" });
-        onAudioReceivedRef.current?.(blob);
-      } else {
-        try {
-          const message: WSMessage = JSON.parse(event.data);
-          switch (message.type) {
-            case "status":
-              updateStatus(message.stage);
-              break;
-            case "transcript":
-              onTranscriptRef.current?.(
-                message.darja_text,
-                message.latency_ms,
-                message.partial ?? false
-              );
-              break;
-            case "answer":
-              onAnswerRef.current?.(message.text, message.citations, message.fallback);
-              break;
-          }
-        } catch {
-          // Not JSON, ignore
+      try {
+        const message: WSMessage = JSON.parse(event.data);
+        switch (message.type) {
+          case "status":
+            updateStatus(message.stage);
+            break;
+          case "answer":
+            onAnswerRef.current?.(message.text, message.citations, message.fallback);
+            break;
         }
+      } catch {
+        // Not JSON, ignore
       }
     };
 
@@ -134,22 +106,15 @@ export function useWebSocket({
     };
   }, [url, updateStatus]);
 
-  const sendAudio = useCallback((audioData: ArrayBuffer) => {
+  const sendMessage = useCallback((text: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(audioData);
-    }
-  }, []);
-
-  const sendEnd = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: "end" }));
+      wsRef.current.send(JSON.stringify({ type: "chat", message: text }));
     }
   }, []);
 
   return {
     isConnected,
     status,
-    sendAudio,
-    sendEnd,
+    sendMessage,
   };
 }

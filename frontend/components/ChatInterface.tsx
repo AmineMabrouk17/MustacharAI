@@ -1,12 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ChatHistory } from "./ChatHistory";
 import { PipelineStatusIndicator } from "./PipelineStatus";
-import { WaveformVisualizer } from "./WaveformVisualizer";
 import { useChatHistory } from "@/hooks/useChatHistory";
-import { useAudioRecorder } from "@/hooks/useAudioRecorder";
-import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import {
   useWebSocket,
   type PipelineStatus,
@@ -27,60 +24,8 @@ function nextId(): string {
 
 export function ChatInterface() {
   const [status, setStatus] = useState<PipelineStatus>("idle");
+  const [input, setInput] = useState("");
   const { messages, setMessages, clearHistory } = useChatHistory();
-
-  const { status: playbackStatus, enqueueAudio } = useAudioPlayback();
-
-  const handleAudioReceived = useCallback(
-    (audioData: Blob) => {
-      enqueueAudio(audioData);
-    },
-    [enqueueAudio]
-  );
-
-  const transcriptBubbleRef = useRef<string | null>(null);
-  const partialTextRef = useRef("");
-
-  const handleTranscript = useCallback(
-    (text: string, _latencyMs: number, partial: boolean) => {
-      if (!text) return;
-      const inProgressId = transcriptBubbleRef.current;
-
-      if (partial) {
-        partialTextRef.current = partialTextRef.current
-          ? `${partialTextRef.current} ${text}`
-          : text;
-        const accumulated = partialTextRef.current;
-        if (inProgressId) {
-          setMessages((prev) =>
-            prev.map((m) => (m.id === inProgressId ? { ...m, text: accumulated } : m))
-          );
-          return;
-        }
-        const id = nextId();
-        transcriptBubbleRef.current = id;
-        setMessages((prev) => [
-          ...prev,
-          { id, role: "user", text: accumulated, timestamp: Date.now() },
-        ]);
-        return;
-      }
-
-      partialTextRef.current = "";
-      if (inProgressId) {
-        transcriptBubbleRef.current = null;
-        setMessages((prev) =>
-          prev.map((m) => (m.id === inProgressId ? { ...m, text } : m))
-        );
-        return;
-      }
-      setMessages((prev) => [
-        ...prev,
-        { id: nextId(), role: "user", text, timestamp: Date.now() },
-      ]);
-    },
-    [setMessages]
-  );
 
   const handleAnswer = useCallback(
     (text: string, citations: Citation[], fallback: boolean) => {
@@ -99,47 +44,25 @@ export function ChatInterface() {
     [setMessages]
   );
 
-  const { isConnected, sendAudio, sendEnd } = useWebSocket({
+  const { isConnected, sendMessage } = useWebSocket({
     url: WS_URL,
-    onAudioReceived: handleAudioReceived,
     onStatusChange: setStatus,
-    onTranscript: handleTranscript,
     onAnswer: handleAnswer,
   });
 
-  const handleDataAvailable = useCallback(
-    (data: ArrayBuffer) => {
-      sendAudio(data);
-    },
-    [sendAudio]
-  );
-
-  const { isRecording, analyserNode, startRecording, stopRecording } =
-    useAudioRecorder({
-      onDataAvailable: handleDataAvailable,
-      timeSlice: 300,
-    });
-
-  const displayStatus = isRecording
-    ? "listening"
-    : playbackStatus === "speaking"
-      ? "speaking"
-      : status;
-
-  const handleRecordClick = useCallback(() => {
-    if (isRecording) {
-      stopRecording();
-      sendEnd();
-      setStatus("processing");
-    } else {
-      startRecording();
-      setStatus("listening");
-    }
-  }, [isRecording, sendEnd, startRecording, stopRecording]);
+  const handleSend = useCallback(() => {
+    const text = input.trim();
+    if (!text || !isConnected) return;
+    setMessages((prev) => [
+      ...prev,
+      { id: nextId(), role: "user", text, timestamp: Date.now() },
+    ]);
+    setInput("");
+    sendMessage(text);
+    setStatus("processing");
+  }, [input, isConnected, sendMessage, setMessages, setStatus]);
 
   const handleClearHistory = useCallback(() => {
-    transcriptBubbleRef.current = null;
-    partialTextRef.current = "";
     clearHistory();
   }, [clearHistory]);
 
@@ -154,7 +77,7 @@ export function ChatInterface() {
 
         {/* Status bar */}
         <div className="flex items-center justify-between bg-zinc-900/50 rounded-lg p-3 shrink-0">
-          <PipelineStatusIndicator status={displayStatus} />
+          <PipelineStatusIndicator status={status} />
           <div className="flex items-center gap-3">
             {messages.length > 0 && (
               <button
@@ -182,31 +105,31 @@ export function ChatInterface() {
           <ChatHistory messages={messages} />
         </div>
 
-        {/* Controls */}
-        <div className="space-y-4 shrink-0">
-          <div className="bg-zinc-900/50 rounded-lg p-3">
-            <WaveformVisualizer
-              analyserNode={analyserNode}
-              isActive={isRecording}
-            />
-          </div>
-
-          <div className="flex justify-center">
-            <button
-              onClick={handleRecordClick}
+        {/* Text input */}
+        <div className="shrink-0 bg-zinc-900/50 rounded-lg p-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend();
+            }}
+            className="flex items-center gap-3"
+          >
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="اكتب سؤالك عن القانون التونسي..."
               disabled={!isConnected}
-              className={`relative group flex items-center justify-center w-16 h-16 rounded-full transition-all duration-200 ${
-                isRecording
-                  ? "bg-red-500 hover:bg-red-600 animate-pulse"
-                  : "bg-emerald-600 hover:bg-emerald-700"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              className="flex-1 bg-zinc-800 text-zinc-100 placeholder-zinc-500 text-sm rounded-lg px-4 py-2.5 outline-none focus:ring-2 focus:ring-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <button
+              type="submit"
+              disabled={!isConnected || !input.trim()}
+              className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="text-2xl">{isRecording ? "⏹️" : "🎙️"}</span>
-              <span className="absolute -bottom-7 text-xs text-zinc-400 whitespace-nowrap">
-                {isRecording ? "إيقاف التسجيل" : "ابدأ التسجيل"}
-              </span>
+              إرسال
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
