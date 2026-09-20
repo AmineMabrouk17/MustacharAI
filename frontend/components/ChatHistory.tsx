@@ -30,7 +30,7 @@ export function ChatHistory({ messages }: ChatHistoryProps) {
     return (
       <div className="flex items-center justify-center h-full rounded-lg bg-zinc-900/30 p-4">
         <p className="text-zinc-500 text-sm">
-          اضغط على زر الميكروفون واسأل عن القانون التونسي
+          اكتب سؤالك عن القانون التونسي
         </p>
       </div>
     );

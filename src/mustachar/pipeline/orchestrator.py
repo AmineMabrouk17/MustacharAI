@@ -1,4 +1,4 @@
-"""Full RAG pipeline orchestrator: STT → Reformulate → Retrieve → Generate → TTS."""
+"""Text RAG pipeline orchestrator: Reformulate → Retrieve → Generate."""
 
 from __future__ import annotations
 
@@ -10,11 +10,9 @@ import structlog
 
 from mustachar.pipeline.generator import FALLBACK_FRENCH, generate
 from mustachar.pipeline.reformulator import reformulate
-from mustachar.pipeline.stt import speech_to_text
 
 logger = structlog.get_logger()
 
-FALLBACK_STT = "Je n'ai pas compris l'audio. Essayez de reformuler."
 FALLBACK_GENERATE = FALLBACK_FRENCH
 
 
@@ -22,7 +20,7 @@ FALLBACK_GENERATE = FALLBACK_FRENCH
 class PipelineResult:
     """Full pipeline result with per-stage latency tracking."""
 
-    transcript: str = ""
+    question: str = ""
     reformulated_query: str = ""
     answer: str = ""
     citations: list[dict[str, Any]] = field(default_factory=list)
@@ -31,75 +29,21 @@ class PipelineResult:
     total_latency_ms: float = 0.0
 
 
-async def run_pipeline(
-    audio_bytes: bytes,
-    filename: str = "audio.webm",
-) -> PipelineResult:
-    """Execute the full voice-to-voice RAG pipeline.
+async def run_pipeline(question: str) -> PipelineResult:
+    """Execute the text-only RAG pipeline: Reformulate → Retrieve → Generate.
 
-    Stages:
-      1. STT — speech-to-text (Darja transcript)
-      2. Reformulate — Darja → French legal query
-      3. Retrieve — vector search over legal corpus
-      4. Generate — grounded French LLM answer
-      5. TTS — text-to-speech (not collected here; streaming handled by caller)
-
-    STT and generation failures return a French fallback message; reformulation
-    errors degrade to the raw transcript. Per-stage latency is logged as
-    structured JSON.
+    Returns the grounded French answer plus retrieved legal citations. The query
+    is first translated from Darja into a French legal search query, then used to
+    retrieve from the corpus before generation. A generation failure returns the
+    French fallback message.
     """
     pipeline_start = time.perf_counter()
-    result = PipelineResult()
+    result = PipelineResult(question=question)
 
-    # ── Stage 1: STT ──────────────────────────────────────────────
+    # ── Stage 1: Reformulate ─────────────────────────────────────
     stage_start = time.perf_counter()
     try:
-        result.transcript = await speech_to_text(audio_bytes, filename)
-    except Exception:
-        logger.exception("pipeline.stt_error")
-        result.transcript = ""
-        result.answer = FALLBACK_STT
-        result.fallback = True
-        result.stage_latencies_ms["stt"] = round(
-            (time.perf_counter() - stage_start) * 1000, 1
-        )
-        result.total_latency_ms = round(
-            (time.perf_counter() - pipeline_start) * 1000, 1
-        )
-        return result
-    result.stage_latencies_ms["stt"] = round(
-        (time.perf_counter() - stage_start) * 1000, 1
-    )
-
-    if not result.transcript:
-        result.answer = FALLBACK_STT
-        result.total_latency_ms = round(
-            (time.perf_counter() - pipeline_start) * 1000, 1
-        )
-        return result
-
-    await _run_post_stt(result, pipeline_start)
-    return result
-
-
-async def run_pipeline_from_transcript(transcript: str) -> PipelineResult:
-    """Run the post-STT stages from an already-recognised transcript.
-
-    Used by the streaming WebSocket path, where the VAD + Whisper stages run
-    as the user speaks; the transcript no longer needs re-transcribing.
-    """
-    pipeline_start = time.perf_counter()
-    result = PipelineResult()
-    result.transcript = transcript
-    await _run_post_stt(result, pipeline_start)
-    return result
-
-
-async def _run_post_stt(result: PipelineResult, pipeline_start: float) -> None:
-    """Execute Reformulate → Retrieve → Generate on an existing transcript."""
-    stage_start = time.perf_counter()
-    try:
-        reformulated = await reformulate(result.transcript)
+        reformulated = await reformulate(question)
     except Exception:
         logger.exception("pipeline.reformulate_error")
         result.reformulated_query = ""
@@ -110,9 +54,9 @@ async def _run_post_stt(result: PipelineResult, pipeline_start: float) -> None:
         result.reformulated_query = reformulated.get("primary_query", "")
         result.stage_latencies_ms["reformulate"] = reformulated.get("latency_ms", 0.0)
 
-    search_query = result.reformulated_query or result.transcript
+    search_query = result.reformulated_query or question
 
-    # ── Stage 3 + 4: Retrieve + Generate ──────────────────────────
+    # ── Stage 2 + 3: Retrieve + Generate ─────────────────────────
     stage_start = time.perf_counter()
     try:
         gen_result = await generate(search_query)
@@ -141,8 +85,10 @@ async def _run_post_stt(result: PipelineResult, pipeline_start: float) -> None:
 
     logger.info(
         "pipeline.completed",
+        question_length=len(question),
         total_latency_ms=result.total_latency_ms,
         stage_latencies_ms=result.stage_latencies_ms,
         fallback=result.fallback,
         answer_length=len(result.answer),
     )
+    return result
