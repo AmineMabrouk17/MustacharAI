@@ -1,42 +1,109 @@
-import os
-from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import Chroma
+import re
+from pathlib import Path
+import fitz  # PyMuPDF
 
-load_dotenv()
 
 PDF_PATH = "constitution-2022.pdf"
-DB_DIR = "./chroma_db"
+
+# Matches Arabic legal structural markers:
+# - الفصول: الفصل 1 / الفصل الأول / الفصل الحادي والعشرون
+# - المواد: المادة 1 / مادة 2
+# - الأبواب / الأقسام
+ARTICLE_PATTERN = re.compile(
+    r"(?:^|\n)\s*(الفصل|المادة|مادة)\s+([0-9]+|الأول|الأولى|[\u0621-\u064A\s]+?)(?:\s*[:.\-–—]|\n)",
+    re.UNICODE | re.MULTILINE,
+)
 
 
-def build_vector_db():
-    print("1. Loading PDF...")
-    loader = PyPDFLoader(PDF_PATH)
-    docs = loader.load()
-    print(f"Loaded {len(docs)} pages.")
+def extract_arabic_text(pdf_path: str | Path) -> str:
+    """Extract clean text page-by-page using PyMuPDF."""
+    doc = fitz.open(str(pdf_path))
+    pages_text = []
 
-    print("2. Splitting text into chunks...")
-    # Chunk size of 800 chars with 150 overlap works well for legal articles
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=150,
-        separators=["\n\n", "\n", " ", ""]
-    )
-    chunks = splitter.split_documents(docs)
-    print(f"Created {len(chunks)} chunks.")
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        # "text" mode preserves logical reading order
+        text = page.get_text("text")
+        if text.strip():
+            pages_text.append(text.strip())
 
-    print("3. Generating embeddings and storing in ChromaDB...")
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    full_text = "\n\n".join(pages_text)
 
-    Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=DB_DIR
-    )
-    print("Index created successfully in ./chroma_db!")
+    # Normalize excessive spaces and common ligature artifacts
+    full_text = re.sub(r"[ \t]+", " ", full_text)
+    full_text = re.sub(r"\n{3,}", "\n\n", full_text)
+
+    return full_text
+
+
+def chunk_arabic_legal_doc(text: str) -> list[dict]:
+    """
+    Split legal text cleanly by Articles (الفصول / المواد).
+    Keeps the preamble (توطئة / ديباجة) as a distinct chunk.
+    """
+    matches = list(ARTICLE_PATTERN.finditer(text))
+
+    if not matches:
+        print("[WARNING] No articles detected with regex. Falling back to paragraph chunking.")
+        paragraphs = [p.strip() for p in text.split("\n\n") if len(p.strip()) > 30]
+        return [{"article": f"فقرة {i+1}", "content": p} for i, p in enumerate(paragraphs)]
+
+    chunks = []
+
+    # 1. Extract Preamble / Introduction if present
+    first_match_start = matches[0].start()
+    preamble = text[:first_match_start].strip()
+    if preamble:
+        chunks.append({
+            "article": "توطئة / مقدمة",
+            "content": preamble
+        })
+
+    # 2. Extract each article cleanly
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+
+        article_type = match.group(1).strip()
+        article_num = match.group(2).strip().replace("\n", " ")
+        label = f"{article_type} {article_num}"
+
+        content = text[start:end].strip()
+        if content:
+            chunks.append({
+                "article": label,
+                "content": content
+            })
+
+    return chunks
+
+
+def inspect_chunks():
+    print(f"--> Reading {PDF_PATH} ...")
+    raw_text = extract_arabic_text(PDF_PATH)
+
+    print(f"--> Extracted {len(raw_text)} total characters.")
+    print("--> Splitting into legal chunks...")
+    chunks = chunk_arabic_legal_doc(raw_text)
+
+    print(f"\n✅ Total Chunks Generated: {len(chunks)}\n")
+    print("=" * 60)
+
+    # Preview the first 3 chunks to verify Arabic direction and readability
+    for i, chunk in enumerate(chunks[:3]):
+        print(f"\n[CHUNK {i+1}] Title: {chunk['article']}")
+        print(f"Content Preview (first 250 chars):\n{chunk['content'][:250]}...")
+        print("-" * 60)
+
+    # Export all chunks to a text file for complete visual inspection
+    out_file = Path("inspected_chunks.txt")
+    with open(out_file, "w", encoding="utf-8") as f:
+        for c in chunks:
+            f.write(f"=== {c['article']} ===\n")
+            f.write(f"{c['content']}\n\n")
+
+    print(f"--> All chunks saved to '{out_file.name}' for inspection.")
 
 
 if __name__ == "__main__":
-    build_vector_db()
+    inspect_chunks()
