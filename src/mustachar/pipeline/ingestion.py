@@ -1,24 +1,186 @@
-"""PDF ingestion pipeline: parse, chunk, embed, store."""
+"""Legal document ingestion pipeline: parse, chunk, embed, store."""
 
 from __future__ import annotations
 
+import io
 import re
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import structlog
 
 from mustachar.infra.chroma_client import get_chroma_client, get_or_create_collection
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 logger = structlog.get_logger()
 
+# Regex to match Arabic and French legal articles
+# Matches: الفصل 1 / الفصل الأول / الفصل التاسع والثمانون / المادة 1 / Article 1
 ARTICLE_PATTERN = re.compile(
-    r"(?:المادة|مادة)\s+(\d+)"
-    r"|^Article\s+(?:Premier|premier|PREMIER|\d+)",
+    r"(?:^|\n)\s*(الفصل\s+(?:[0-9]+|الأول|الأوّل|الأولى|الثاني|الثّاني|الثالث|الثّالث|الرابع|الرّابع|الخامس|السادس|السّادس|السابع|السّابع|الثامن|التاسع|التّاسع|العاشر|[\u0621-\u064A\s]+?)|(?:المادة|مادة)\s+\d+|Article\s+\d+)(?:\s*[\n:\-–—]|\s*$)",
     re.UNICODE | re.MULTILINE,
 )
+
+
+def extract_text_from_bytes(file_bytes: bytes, filename: str) -> str:
+    """Extract clean text from PDF or TXT bytes."""
+    suffix = Path(filename).suffix.lower()
+
+    if suffix == ".txt":
+        return file_bytes.decode("utf-8", errors="replace")
+
+    if suffix == ".pdf":
+        text_parts: list[str] = []
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            from pypdf import PdfReader
+
+            reader = PdfReader(io.BytesIO(file_bytes))
+            for page in reader.pages:
+                text = (page.extract_text() or "").strip()
+                if text:
+                    text_parts.append(text)
+            return "\n\n".join(text_parts)
+
+        with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+            for page in doc:
+                text = page.get_text("text").strip()
+                if text:
+                    text_parts.append(text)
+        return "\n\n".join(text_parts)
+
+    raise ValueError(f"صيغة الملف غير مدعومة: {suffix}. يرجى رفع ملف .pdf أو .txt")
+
+
+def chunk_legal_text(text: str, filename: str) -> list[Any]:
+    """Chunk legal text cleanly by articles (الفصول / المواد)."""
+    clean_text = re.sub(r"\r\n", "\n", text)
+    clean_text = re.sub(r"[ \t]+", " ", clean_text)
+
+    matches = list(ARTICLE_PATTERN.finditer(clean_text))
+
+    chunks: list[dict[str, str]] = []
+    source_name = Path(filename).stem
+
+    # Fallback to paragraph chunking if regex finds no legal articles
+    if not matches:
+        paragraphs = [p.strip() for p in clean_text.split("\n\n") if len(p.strip()) > 40]
+        for i, p in enumerate(paragraphs):
+            chunks.append(
+                {
+                    "article": f"مقطع {i+1}",
+                    "content": p,
+                    "source": source_name,
+                }
+            )
+        return chunks
+
+    # Preamble / Introduction
+    preamble = clean_text[: matches[0].start()].strip()
+    if preamble:
+        chunks.append(
+            {
+                "article": "توطئة / مقدمة",
+                "content": preamble,
+                "source": source_name,
+            }
+        )
+
+    # Each Article
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(clean_text)
+
+        article_title = match.group(1).strip().replace("\n", " ")
+        article_title = re.sub(r"\s+", " ", article_title)
+        content = clean_text[start:end].strip()
+
+        if content:
+            chunks.append(
+                {
+                    "article": article_title,
+                    "content": content,
+                    "source": source_name,
+                }
+            )
+
+    return chunks
+
+
+def ingest_file_bytes(file_bytes: bytes, filename: str) -> dict[str, Any]:
+    """Parse, chunk, embed, and store uploaded document into ChromaDB."""
+    logger.info("ingesting_document", filename=filename, size=len(file_bytes))
+
+    raw_text = extract_text_from_bytes(file_bytes, filename)
+    if not raw_text.strip():
+        raise ValueError(f"تعذر استخراج أي نص من الملف: {filename}")
+
+    chunks = chunk_legal_text(raw_text, filename)
+    if not chunks:
+        raise ValueError(f"لم يتم العثور على محتوى صالح للتقسيم في {filename}")
+
+    ids = [
+        f"{c.get('source', 'unknown')}_{i}_{c.get('article', '')}"
+        for i, c in enumerate(chunks)
+    ]
+    documents = [c["content"] for c in chunks]
+    metadatas: list[dict[str, Any]] = [
+        {
+            "source": c.get("source", ""),
+            "article": c.get("article", ""),
+            "category": "",
+        }
+        for c in chunks
+    ]
+
+    client = get_chroma_client()
+    collection = get_or_create_collection(client)
+
+    batch_size = 100
+    for i in range(0, len(documents), batch_size):
+        batch_docs = documents[i : i + batch_size]
+        batch_ids = ids[i : i + batch_size]
+        batch_meta = metadatas[i : i + batch_size]
+        collection.add(
+            documents=batch_docs,
+            ids=batch_ids,
+            metadatas=batch_meta,
+        )
+
+    logger.info(
+        "ingestion_complete",
+        filename=filename,
+        articles_indexed=len(chunks),
+    )
+
+    return {
+        "filename": filename,
+        "source": Path(filename).stem,
+        "articles_indexed": len(chunks),
+        "status": "success",
+    }
+
+
+def list_indexed_documents() -> list[dict[str, Any]]:
+    """List distinct documents stored in ChromaDB."""
+    try:
+        client = get_chroma_client()
+        collection = get_or_create_collection(client)
+        data = collection.get()
+        metadatas = data.get("metadatas") or []
+
+        sources: dict[str, int] = {}
+        for m in metadatas:
+            src = m.get("source", "مستند")
+            sources[src] = sources.get(src, 0) + 1
+
+        return [
+            {"source": src, "articles_count": count}
+            for src, count in sources.items()
+        ]
+    except Exception as exc:  # Chroma may be unavailable (cold start)
+        logger.error("failed_listing_docs", error=str(exc))
+        return []
 
 
 def parse_pdf(pdf_path: Path) -> str:

@@ -15,16 +15,27 @@ export interface ChatMessage {
 
 interface ChatHistoryProps {
   messages: ChatMessage[];
+  isThinking?: boolean;
 }
 
-export function ChatHistory({ messages }: ChatHistoryProps) {
+export function ChatHistory({ messages, isThinking = false }: ChatHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isThinking]);
+
+  const renderThinking = isThinking && (
+    <div className="flex justify-end">
+      <div className="bg-emerald-900/40 text-zinc-100 rounded-2xl rounded-tl-sm px-4 py-3">
+        <p className="text-sm text-emerald-300 animate-pulse">
+          ⚡ يعالج استفسارك...
+        </p>
+      </div>
+    </div>
+  );
 
   if (messages.length === 0) {
     return (
@@ -81,6 +92,7 @@ export function ChatHistory({ messages }: ChatHistoryProps) {
           </div>
         </div>
       ))}
+      {renderThinking}
     </div>
   );
 }
