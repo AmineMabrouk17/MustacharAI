@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -72,6 +71,73 @@ async def test_ask_returns_pipeline_result(mock_pipeline: AsyncMock) -> None:
     assert len(body["citations"]) == 1
     assert body["citations"][0]["category"] == "مجلة الشغل"
     mock_pipeline.assert_awaited_once_with("كيفاش القانون؟")
+
+
+# ── REST /api/v1/documents endpoints ───────────────────────────
+
+
+@patch(
+    "mustachar.api.app.list_indexed_documents",
+    return_value=[{"source": "constitution", "articles_count": 149}],
+)
+async def test_get_documents(mock_list: MagicMock) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as c:
+        resp = await c.get("/api/v1/documents")
+    assert resp.status_code == 200
+    assert resp.json() == [{"source": "constitution", "articles_count": 149}]
+
+
+@patch(
+    "mustachar.api.app.ingest_file_bytes",
+    return_value={
+        "filename": "loi.txt",
+        "source": "loi",
+        "articles_indexed": 12,
+        "status": "success",
+    },
+)
+async def test_upload_document_txt(mock_ingest: MagicMock) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as c:
+        resp = await c.post(
+            "/api/v1/documents/upload",
+            files={"file": ("loi.txt", "الفصل 1\nنص", "text/plain")},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["articles_indexed"] == 12
+    assert body["status"] == "success"
+    mock_ingest.assert_called_once()
+    assert mock_ingest.call_args.args[1] == "loi.txt"
+
+
+async def test_upload_document_rejects_unsupported_extension() -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as c:
+        resp = await c.post(
+            "/api/v1/documents/upload",
+            files={"file": ("malware.exe", b"\x00\x01", "application/octet-stream")},
+        )
+    assert resp.status_code == 400
+
+
+@patch(
+    "mustachar.api.app.ingest_file_bytes",
+    side_effect=ValueError("تعذر استخراج أي نص"),
+)
+async def test_upload_document_returns_422_on_value_error(mock_ingest: MagicMock) -> None:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://testserver"
+    ) as c:
+        resp = await c.post(
+            "/api/v1/documents/upload",
+            files={"file": ("bad.txt", "   ", "text/plain")},
+        )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio

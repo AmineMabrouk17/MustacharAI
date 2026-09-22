@@ -14,7 +14,15 @@ from mustachar.pipeline.generator import (
     _build_context_block,
     generate,
 )
-from mustachar.pipeline.ingestion import chunk_by_articles, parse_pdf
+from mustachar.pipeline.ingestion import (
+    ARTICLE_PATTERN,
+    chunk_by_articles,
+    chunk_legal_text,
+    extract_text_from_bytes,
+    ingest_file_bytes,
+    list_indexed_documents,
+    parse_pdf,
+)
 from mustachar.pipeline.orchestrator import (
     FALLBACK_GENERATE,
     PipelineResult,
@@ -53,6 +61,98 @@ def test_parse_pdf(tmp_path: Any) -> None:
     with open(pdf_path, "wb") as f:
         writer.write(f)
     assert isinstance(parse_pdf(pdf_path), str)
+
+
+# ── Dynamic byte ingestion ──────────────────────────────────
+
+
+def test_extract_text_from_txt_bytes() -> None:
+    text = extract_text_from_bytes("الفصل 1\nنص القانون".encode(), "loi.txt")
+    assert "الفصل 1" in text
+
+
+def test_extract_text_from_txt_rejects_unsupported_suffix() -> None:
+    with pytest.raises(ValueError, match="غير مدعومة"):
+        extract_text_from_bytes(b"any", "notes.docx")
+
+
+def test_chunk_legal_text_splits_arabic_articles() -> None:
+    text = "دستور الجمهورية\n\nالفصل 1\nالدولة التونسية حرة.\n\nالفصل 2\nتونس بلد مسلم."
+    chunks = chunk_legal_text(text, "constitution.txt")
+    assert {c["article"] for c in chunks} >= {"الفصل 1", "الفصل 2"}
+    assert all(c["source"] == "constitution" for c in chunks)
+
+
+def test_chunk_legal_text_falls_back_to_paragraphs() -> None:
+    text = (
+        "جملة أولى بدون عناوين قانونية، وهي عبارة عن فقرة مطولة حتى تتجاوز الطول الأدنى المطلوب."
+        "\n\n"
+        "جملة ثانية بدون عناوين قانونية، وهي كذلك فقرة مطولة لتجاوز الطول الأدنى المطلوب."
+    )
+    chunks = chunk_legal_text(text, "notes.txt")
+    assert chunks
+    assert all(c["article"].startswith("مقطع") for c in chunks)
+
+
+@patch("mustachar.pipeline.ingestion.get_or_create_collection")
+@patch("mustachar.pipeline.ingestion.get_chroma_client")
+@patch("mustachar.pipeline.ingestion.extract_text_from_bytes", return_value="الفصل 1\nنص\n")
+def test_ingest_file_bytes_stores_chunks(
+    mock_extract: MagicMock,
+    mock_client: MagicMock,
+    mock_col: MagicMock,
+) -> None:
+    collection = MagicMock()
+    mock_col.return_value = collection
+
+    result = ingest_file_bytes(b"bytes", "constitution.txt")
+
+    assert result["status"] == "success"
+    assert result["source"] == "constitution"
+    assert result["articles_indexed"] >= 1
+    collection.add.assert_called()
+
+
+@patch(
+    "mustachar.pipeline.ingestion.extract_text_from_bytes",
+    return_value="  ",
+)
+def test_ingest_file_bytes_raises_on_empty_text(mock_extract: MagicMock) -> None:
+    with pytest.raises(ValueError, match="تعذر استخراج أي نص"):
+        ingest_file_bytes(b" ", "empty.txt")
+
+
+@patch("mustachar.pipeline.ingestion.get_or_create_collection")
+@patch("mustachar.pipeline.ingestion.get_chroma_client")
+def test_list_indexed_documents_aggregates_sources(
+    mock_client: MagicMock,
+    mock_col: MagicMock,
+) -> None:
+    collection = MagicMock()
+    collection.get.return_value = {
+        "metadatas": [
+            {"source": "a", "article": "الفصل 1"},
+            {"source": "a", "article": "الفصل 2"},
+            {"source": "b", "article": "المادة 1"},
+        ]
+    }
+    mock_col.return_value = collection
+
+    docs = list_indexed_documents()
+    by_source = {d["source"]: d["articles_count"] for d in docs}
+    assert by_source == {"a": 2, "b": 1}
+
+
+@patch("mustachar.pipeline.ingestion.get_chroma_client", side_effect=RuntimeError("down"))
+def test_list_indexed_documents_returns_empty_on_error(
+    mock_client: MagicMock,
+) -> None:
+    assert list_indexed_documents() == []
+
+
+def test_article_pattern_matches_french_articles() -> None:
+    match = ARTICLE_PATTERN.search("Article 1\nLe présent code régit.")
+    assert match is not None
 
 
 # ── Retrieval ───────────────────────────────────────────────────
