@@ -8,12 +8,52 @@ from typing import Any
 
 import structlog
 
-from mustachar.pipeline.generator import FALLBACK_FRENCH, generate
+from mustachar.infra.llm_client import get_active_model
+from mustachar.pipeline.generator import fallback_for, generate
 from mustachar.pipeline.reformulator import reformulate
 
 logger = structlog.get_logger()
 
-FALLBACK_GENERATE = FALLBACK_FRENCH
+
+def _format_llm_error(exc: Exception) -> tuple[str, str]:
+    """Build a user-facing Arabic error message plus the raw technical detail.
+
+    Returns ``(answer_text, detail)`` where ``detail`` is a single-line,
+    truncated version of the underlying exception.  Gemini error JSON is
+    collapsed to ``Gemini HTTP <code>: <message>`` for readability.
+    """
+    active = get_active_model()
+    detail = " ".join(str(exc).split())[:250]
+    if detail.startswith("Gemini HTTP"):
+        detail = _clean_gemini_error(str(exc)) or detail
+    prefix = f"نموذج {active['provider']}/{active['model']}"
+    if detail:
+        answer = f"⚠️ تعذّر الحصول على رد من {prefix}. تفاصيل الخطأ: {detail}"
+    else:
+        answer = f"⚠️ تعذّر الحصول على رد من {prefix}. حاول مرة أخرى أو بدّل النموذج."
+    return answer, detail
+
+
+def _clean_gemini_error(text: str) -> str:
+    """Extract ``Gemini HTTP <code>: <message>`` from the Gemini error JSON."""
+    try:
+        import json as _json
+        import re
+
+        m = re.search(r"Gemini HTTP (\d+)", text)
+        if not m:
+            return ""
+        code = m.group(1)
+        payload = text[text.index(":"):].strip()
+        payload = payload.lstrip(": ").strip()
+        if payload.startswith("{"):
+            data = _json.loads(payload)
+            message = data.get("error", {}).get("message", "")
+            if message:
+                return f"Gemini HTTP {code}: {' '.join(message.split())[:220]}"
+    except Exception:
+        pass
+    return ""
 
 
 @dataclass
@@ -25,6 +65,7 @@ class PipelineResult:
     answer: str = ""
     citations: list[dict[str, Any]] = field(default_factory=list)
     fallback: bool = True
+    error: str = ""
     stage_latencies_ms: dict[str, float] = field(default_factory=dict)
     total_latency_ms: float = 0.0
 
@@ -57,22 +98,36 @@ async def run_pipeline(question: str) -> PipelineResult:
     search_query = result.reformulated_query or question
 
     # ── Stage 2 + 3: Retrieve + Generate ─────────────────────────
+    # Retrieve with the reformulated (French) query plus Arabic-leg queries:
+    # the Arabic MSA reformulation first (cleanest lexical signal, prioritised
+    # by the keyword extractor), then the raw question — the cross-lingual
+    # reformulation alone misses specific legal terms, while the MSA/raw Arabic
+    # legs match the Arabic corpus directly.
+    extra_queries: list[str] = []
+    arabic_query = reformulated.get("arabic_query", "")
+    for q in (arabic_query, question):
+        if q and q.strip() and q != search_query and q not in extra_queries:
+            extra_queries.append(q)
     stage_start = time.perf_counter()
     try:
-        gen_result = await generate(search_query)
-    except Exception:
+        gen_result = await generate(
+            search_query,
+            extra_queries=extra_queries or None,
+            language_question=question,
+        )
+    except Exception as exc:
         logger.exception("pipeline.generate_error")
-        result.answer = FALLBACK_GENERATE
+        result.answer, result.error = _format_llm_error(exc)
         result.fallback = True
         result.citations = []
     else:
-        result.answer = gen_result.get("answer", FALLBACK_GENERATE)
+        result.answer = gen_result.get("answer", fallback_for(question))
         result.fallback = gen_result.get("fallback", True)
         result.citations = [
             {
                 "source": hit.get("source", ""),
                 "article": hit.get("article", ""),
-                "content": hit.get("content", "")[:200],
+                "content": hit.get("content", "")[:2000],
                 "category": hit.get("category", ""),
             }
             for hit in gen_result.get("hits", [])

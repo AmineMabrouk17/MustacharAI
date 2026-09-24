@@ -42,6 +42,9 @@ Thumbs.db
 # Data (local only)
 data/chroma_db/
 data/raw_pdfs/
+data/ocr_texts/
+data/openrouter_config.json
+data/active_model.json
 
 # Arabic RAG chatbot index
 chroma_db/
