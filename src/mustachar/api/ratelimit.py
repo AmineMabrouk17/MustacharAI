@@ -24,6 +24,11 @@ MAX_REQUESTS_PER_MINUTE = 15
 _WINDOW_SECONDS = 60.0
 _API_PREFIX = "/api/"
 
+# GET endpoints polled by the browser on connect / message send. Exempted from
+# the limiter so normal UI usage never trips a 429; state-changing requests
+# (POST/DELETE) keep the full protection.
+_POLLED_GET_PATHS = frozenset({"/api/v1/models", "/api/v1/documents"})
+
 _hits: dict[str, deque[float]] = {}
 
 
@@ -45,6 +50,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
         if not request.url.path.startswith(_API_PREFIX):
+            return await call_next(request)
+        if request.method == "GET" and request.url.path in _POLLED_GET_PATHS:
             return await call_next(request)
 
         ip = _client_ip(request)

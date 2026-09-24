@@ -9,7 +9,12 @@ from pydantic import BaseModel, Field
 from mustachar.api.ratelimit import RateLimitMiddleware
 from mustachar.api.websocket import router as ws_router
 from mustachar.core.settings import settings
-from mustachar.pipeline.ingestion import ingest_file_bytes, list_indexed_documents
+from mustachar.infra import llm_client
+from mustachar.pipeline.ingestion import (
+    delete_source,
+    ingest_file_bytes,
+    list_indexed_documents,
+)
 from mustachar.pipeline.orchestrator import run_pipeline
 
 
@@ -17,6 +22,20 @@ class AskRequest(BaseModel):
     """Payload for the ``/api/v1/ask`` endpoint."""
 
     question: str = Field(..., min_length=1, max_length=5000)
+
+
+class ModelRequest(BaseModel):
+    """Payload for switching the active LLM (`POST /api/v1/models/active`)."""
+
+    provider: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
+
+
+class OpenRouterConfigRequest(BaseModel):
+    """Payload for registering a user-provided OpenRouter key + model."""
+
+    api_key: str = Field(..., min_length=1)
+    model: str = Field(..., min_length=1)
 
 
 def create_app() -> FastAPI:
@@ -70,6 +89,69 @@ def create_app() -> FastAPI:
                 detail=f"حدث خطأ أثناء فهرسة الملف: {exc}",
             ) from None
 
+    @app.get("/api/v1/models")
+    async def get_models() -> dict[str, Any]:
+        """List available LLM providers/models and the active model."""
+        return {
+            "providers": [
+                {"id": pid, "label": p["label"], "models": p["models"]}
+                for pid, p in llm_client.PROVIDERS.items()
+            ],
+            "active": llm_client.get_active_model(),
+            "openrouter_configured": bool(
+                llm_client.get_openrouter_config().get("api_key")
+            ),
+        }
+
+    @app.post("/api/v1/models/openrouter")
+    async def configure_openrouter(
+        body: OpenRouterConfigRequest,
+    ) -> dict[str, Any]:
+        """Register a user-provided OpenRouter API key and model name.
+
+        The key is validated against OpenRouter's ``/auth/key`` endpoint before
+        the config is persisted (survives server restarts).
+        """
+        if not await llm_client.validate_openrouter_key(body.api_key):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "مفتاح OpenRouter غير صالح أو تعذّر التحقق منه. "
+                    "تحقق من المفتاح (sk-or-v1-...) ثم أعد المحاولة."
+                ),
+            )
+        try:
+            cfg = llm_client.set_openrouter_config(body.api_key, body.model)
+        except ValueError as val_err:
+            raise HTTPException(status_code=422, detail=str(val_err)) from None
+        return {
+            "configured": True,
+            "model": cfg["model"],
+            "providers": [
+                {"id": pid, "label": p["label"], "models": p["models"]}
+                for pid, p in llm_client.PROVIDERS.items()
+            ],
+        }
+
+    @app.post("/api/v1/models/active")
+    async def set_models_active(body: ModelRequest) -> dict[str, Any]:
+        """Switch the LLM used for generation/reformulation."""
+        try:
+            return {"active": llm_client.set_active_model(body.provider, body.model)}
+        except ValueError as val_err:
+            raise HTTPException(status_code=422, detail=str(val_err)) from None
+
+    @app.delete("/api/v1/documents/{source}")
+    async def delete_document(source: str) -> dict[str, Any]:
+        """Delete every chunk of one indexed document (matched by source name)."""
+        removed = delete_source(source)
+        if removed == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"المصدر «{source}» غير موجود في القوانين المفهرسة.",
+            )
+        return {"source": source, "removed_chunks": removed}
+
     @app.post("/api/v1/ask")
     async def ask(body: AskRequest) -> dict[str, object]:
         result = await run_pipeline(body.question)
@@ -79,6 +161,7 @@ def create_app() -> FastAPI:
             "answer": result.answer,
             "citations": result.citations,
             "fallback": result.fallback,
+            "error": result.error,
             "stage_latencies_ms": result.stage_latencies_ms,
             "total_latency_ms": result.total_latency_ms,
         }

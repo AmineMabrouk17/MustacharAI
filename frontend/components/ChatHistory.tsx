@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { LegalCitationCard } from "./LegalCitationCard";
+import { MarkdownMessage } from "./MarkdownMessage";
 import type { Citation } from "@/hooks/useWebSocket";
 
 export interface ChatMessage {
@@ -10,6 +11,7 @@ export interface ChatMessage {
   text: string;
   citations?: Citation[];
   fallback?: boolean;
+  error?: string;
   timestamp: number;
 }
 
@@ -61,12 +63,25 @@ export function ChatHistory({ messages, isThinking = false }: ChatHistoryProps) 
             className={`max-w-[85%] rounded-2xl px-4 py-3 ${
               msg.role === "user"
                 ? "bg-zinc-800 text-zinc-100 rounded-tr-sm"
-                : "bg-emerald-900/40 text-zinc-100 rounded-tl-sm"
+                : msg.error
+                  ? "bg-red-950/40 border border-red-800/60 text-red-100 rounded-tl-sm"
+                  : "bg-emerald-900/40 text-zinc-100 rounded-tl-sm"
             }`}
           >
-            <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
-              {msg.text}
-            </p>
+            {msg.role === "assistant" ? (
+              <>
+                {msg.error && (
+                  <p className="text-xs font-bold text-red-300 mb-1.5 flex items-center gap-1">
+                    ⚠️ تعذّر الحصول على الرد من النموذج
+                  </p>
+                )}
+                <MarkdownMessage text={msg.text} />
+              </>
+            ) : (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
+                {msg.text}
+              </p>
+            )}
 
             {msg.citations && msg.citations.length > 0 && (
               <div className="mt-3 flex flex-col gap-2">

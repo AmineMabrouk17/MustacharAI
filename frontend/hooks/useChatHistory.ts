@@ -6,6 +6,10 @@ import type { ChatMessage } from "@/components/ChatHistory";
 
 const STORAGE_KEY = "mustachar.chat.history.v1";
 
+// Stable snapshot for SSR/first render — must be cached (same reference every
+// call), otherwise React warns about an infinite loop.
+const EMPTY_MESSAGES: ChatMessage[] = [];
+
 let cachedMessages: ChatMessage[] | null = null;
 
 function isChatMessage(value: unknown): value is ChatMessage {
@@ -54,7 +58,7 @@ function persist(messages: ChatMessage[]): void {
 }
 
 export function useChatHistory() {
-  const messages = useSyncExternalStore(subscribe, loadMessages, () => []);
+  const messages = useSyncExternalStore(subscribe, loadMessages, () => EMPTY_MESSAGES);
 
   const setMessages = useCallback((update: SetStateAction<ChatMessage[]>) => {
     persist(typeof update === "function" ? update(loadMessages()) : update);

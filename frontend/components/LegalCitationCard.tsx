@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Citation } from "@/hooks/useWebSocket";
 
 interface LegalCitationCardProps {
@@ -7,8 +8,16 @@ interface LegalCitationCardProps {
   index: number;
 }
 
+/** Show the first characters of the citation article, with a see-more toggle. */
+const COLLAPSE_AT = 220;
+
 export function LegalCitationCard({ citation, index }: LegalCitationCardProps) {
+  const [expanded, setExpanded] = useState(false);
   const codeName = citation.category || citation.source;
+  const fullContent = citation.content ?? "";
+  const isLong = fullContent.length > COLLAPSE_AT;
+  const shownContent =
+    isLong && !expanded ? `${fullContent.slice(0, COLLAPSE_AT)}…` : fullContent;
 
   return (
     <div className="rounded-lg border border-zinc-700/50 bg-zinc-800/50 p-3 text-sm">
@@ -33,8 +42,16 @@ export function LegalCitationCard({ citation, index }: LegalCitationCardProps) {
         )}
       </div>
       <p className="text-zinc-300 leading-relaxed text-xs" dir="auto">
-        {citation.content}
+        {shownContent}
       </p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded((prev) => !prev)}
+          className="mt-2 text-xs font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+        >
+          {expanded ? "عرض أقل ▲" : "عرض المزيد ▼"}
+        </button>
+      )}
     </div>
   );
 }

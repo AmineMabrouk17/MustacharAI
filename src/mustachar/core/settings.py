@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_chat_model: str = "allam-2-7b"
     groq_stt_model: str = "whisper-large-v3"
+    google_api_key: str = ""
     chroma_persist_dir: str = "data/chroma_db"
     retrieval_threshold: float = 0.84
     tts_voice: str = "fr-FR-HenriNeural"

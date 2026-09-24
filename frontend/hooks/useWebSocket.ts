@@ -16,6 +16,7 @@ export interface AnswerMessage {
   text: string;
   citations: Citation[];
   fallback: boolean;
+  error?: string;
   latency_ms: number;
 }
 
@@ -29,7 +30,12 @@ export type WSMessage = AnswerMessage | StatusMessage;
 interface UseWebSocketOptions {
   url: string;
   onStatusChange?: (status: PipelineStatus) => void;
-  onAnswer?: (text: string, citations: Citation[], fallback: boolean) => void;
+  onAnswer?: (
+    text: string,
+    citations: Citation[],
+    fallback: boolean,
+    error?: string
+  ) => void;
   onError?: (error: Event) => void;
 }
 
@@ -80,7 +86,12 @@ export function useWebSocket({
             updateStatus(message.stage);
             break;
           case "answer":
-            onAnswerRef.current?.(message.text, message.citations, message.fallback);
+            onAnswerRef.current?.(
+              message.text,
+              message.citations,
+              message.fallback,
+              message.error
+            );
             break;
         }
       } catch {
