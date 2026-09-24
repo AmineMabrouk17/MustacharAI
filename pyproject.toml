@@ -80,7 +80,7 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = [
     "chromadb.*",
-    "edge_tts.*",
+    "fitz.*",
     "groq.*",
     "numpy.*",
     "structlog.*",

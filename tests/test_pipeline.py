@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from mustachar.pipeline.generator import (
+    FALLBACK_ARABIC,
     FALLBACK_FRENCH,
     SYSTEM_PROMPT,
     _build_context_block,
@@ -24,7 +25,6 @@ from mustachar.pipeline.ingestion import (
     parse_pdf,
 )
 from mustachar.pipeline.orchestrator import (
-    FALLBACK_GENERATE,
     PipelineResult,
     run_pipeline,
 )
@@ -162,12 +162,21 @@ def _mock_query_result(
     documents: list[str] | None = None,
     metadatas: list[dict[str, Any]] | None = None,
     distances: list[float] | None = None,
+    ids: list[str] | None = None,
 ) -> dict[str, Any]:
+    n = len(distances or [])
     return {
         "documents": [documents or []],
         "metadatas": [metadatas or []],
         "distances": [distances or []],
+        "ids": [ids or [f"chunk-{i}" for i in range(n)]],
     }
+
+
+def _config_collection_mock(collection: MagicMock) -> None:
+    """Give a mock collection the corpus-wide stats retrieval queries."""
+    collection.count.return_value = 1000
+    collection.get.return_value = {"ids": []}
 
 
 @patch("mustachar.pipeline.retrieval.get_or_create_collection")
@@ -184,25 +193,29 @@ def test_retrieve_filters_by_threshold(
         ],
         distances=[0.1, 0.2],
     )
+    _config_collection_mock(collection)
     mock_col.return_value = collection
 
-    hits = retrieve("query")
+    # Explicit 0.84 so the test is independent of the machine's .env value.
+    hits = retrieve("query", threshold=0.84)
     assert len(hits) == 1
     assert hits[0]["distance"] == 0.1
 
 
 @patch("mustachar.pipeline.retrieval.get_or_create_collection")
 @patch("mustachar.pipeline.retrieval.get_chroma_client")
-def test_retrieve_default_top_k_is_three(
+def test_retrieve_default_top_k(
     mock_client: MagicMock, mock_col: MagicMock
 ) -> None:
     collection = MagicMock()
     collection.query.return_value = _mock_query_result()
+    _config_collection_mock(collection)
     mock_col.return_value = collection
 
     retrieve("query")
     _, kwargs = collection.query.call_args
-    assert kwargs["n_results"] == 3
+    # 3x the default top-k is fetched, then trimmed to 5 after merge/filter.
+    assert kwargs["n_results"] == 15
 
 
 @patch("mustachar.pipeline.retrieval.get_or_create_collection")
@@ -219,16 +232,18 @@ def test_retrieve_cosine_threshold_boundary(
         ],
         distances=[0.16, 0.17],
     )
+    _config_collection_mock(collection)
     mock_col.return_value = collection
 
-    hits = retrieve("query")
+    hits = retrieve("query", threshold=0.84)
     assert [h["distance"] for h in hits] == [0.16]
 
 
 def test_threshold_defaults_from_settings() -> None:
     from mustachar.core.settings import Settings
 
-    assert Settings().retrieval_threshold == 0.84
+    # Schema default (0.84), independent of any local .env override.
+    assert Settings.model_fields["retrieval_threshold"].default == 0.84
 
 
 # ── Generator ───────────────────────────────────────────────────
@@ -254,7 +269,8 @@ def test_build_context_block() -> None:
 async def test_generate_fallback_on_no_hits(mock_retrieve: AsyncMock) -> None:
     result = await generate("سؤال")
     assert result["fallback"] is True
-    assert result["answer"] == FALLBACK_FRENCH
+    # Arabic question ⇒ Arabic fallback message
+    assert result["answer"] == FALLBACK_ARABIC
 
 
 def test_system_prompt_requires_french_output() -> None:
@@ -359,8 +375,11 @@ async def test_pipeline_generate_failure_returns_fallback(
     mock_generate.side_effect = RuntimeError("error")
 
     result = await run_pipeline("كيفاش القانون؟")
-    assert result.answer == FALLBACK_GENERATE
     assert result.fallback is True
+    # The generation failure surfaces as a real, user-visible error message
+    # (with the technical detail) instead of a generic fallback.
+    assert "تعذّر الحصول على رد" in result.answer
+    assert "error" in result.error
 
 
 @pytest.mark.asyncio
@@ -383,7 +402,9 @@ async def test_pipeline_uses_reformulated_query(
     }
 
     await run_pipeline("كيفاش القانون؟")
-    mock_generate.assert_awaited_once_with("القانون")
+    mock_generate.assert_awaited_once_with(
+        "القانون", extra_queries=["كيفاش القانون؟"], language_question="كيفاش القانون؟"
+    )
 
 
 @pytest.mark.asyncio
@@ -406,11 +427,13 @@ async def test_pipeline_falls_back_to_raw_question(
     }
 
     await run_pipeline("كيفاش القانون؟")
-    mock_generate.assert_awaited_once_with("كيفاش القانون؟")
+    mock_generate.assert_awaited_once_with(
+        "كيفاش القانون؟", extra_queries=None, language_question="كيفاش القانون؟"
+    )
 
 
 def test_fallback_message_is_french() -> None:
-    assert "dans le corpus juridique" in FALLBACK_GENERATE
+    assert "dans le corpus juridique" in FALLBACK_FRENCH
 
 
 def test_pipeline_result_defaults() -> None:
