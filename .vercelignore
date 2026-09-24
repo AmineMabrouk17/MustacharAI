@@ -1,0 +1,19 @@
+# Only the frontend/ app is deployed to Vercel; keep the upload tiny.
+.git
+.venv
+.vercel
+__pycache__
+.mypy_cache
+.ruff_cache
+data
+docs
+scripts
+src
+tests
+Makefile
+*.md
+.env*
+frontend/node_modules
+frontend/.next
+frontend/.env*
+frontend/.vercel

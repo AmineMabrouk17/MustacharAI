@@ -53,3 +53,8 @@ chroma_db/
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+
+# vercel
+/.vercel
+.vercel
+.env*
