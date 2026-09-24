@@ -15,8 +15,10 @@ logger = structlog.get_logger()
 
 # Regex to match Arabic and French legal articles
 # Matches: الفصل 1 / الفصل الأول / الفصل التاسع والثمانون / المادة 1 / Article 1
+# Delimiter class tolerates OCR artefacts ("الفصل 2.- texte", "الفصل 5 (نقح…")
+# while still requiring start-of-line so inline references don't split.
 ARTICLE_PATTERN = re.compile(
-    r"(?:^|\n)\s*(الفصل\s+(?:[0-9]+|الأول|الأوّل|الأولى|الثاني|الثّاني|الثالث|الثّالث|الرابع|الرّابع|الخامس|السادس|السّادس|السابع|السّابع|الثامن|التاسع|التّاسع|العاشر|[\u0621-\u064A\s]+?)|(?:المادة|مادة)\s+\d+|Article\s+\d+)(?:\s*[\n:\-–—]|\s*$)",
+    r"(?:^|\n)\s*((?:الفصل\s+(?:[0-9۰-۹]+|الأول|الأوّل|الأولى|الثاني|الثّاني|الثالث|الثّالث|الرابع|الرّابع|الخامس|السادس|السّادس|السابع|السّابع|الثامن|التاسع|التّاسع|العاشر|[\u0621-\u064A\s]+?))|(?:المادة|مادة)\s+[0-9۰-۹]+|Article\s+\d+)(?:\s*[\n:\-–—.()؛;،]|\s*$)",
     re.UNICODE | re.MULTILINE,
 )
 
@@ -181,6 +183,24 @@ def list_indexed_documents() -> list[dict[str, Any]]:
     except Exception as exc:  # Chroma may be unavailable (cold start)
         logger.error("failed_listing_docs", error=str(exc))
         return []
+
+
+def delete_source(source: str) -> int:
+    """Delete every chunk belonging to *source* from ChromaDB.
+
+    Returns the number of deleted chunks (0 when the source does not exist).
+    """
+    client = get_chroma_client()
+    collection = get_or_create_collection(client)
+
+    existing = collection.get(where={"source": source}, include=[])
+    ids = existing.get("ids") or []
+    count = len(ids)
+    if count:
+        collection.delete(where={"source": source})
+
+    logger.info("source_deleted", source=source, chunks=count)
+    return count
 
 
 def parse_pdf(pdf_path: Path) -> str:
